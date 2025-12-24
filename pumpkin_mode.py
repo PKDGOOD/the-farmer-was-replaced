@@ -8,16 +8,22 @@ def plant_all():
 		plant.pumpkin()
 	moves.snake_traverse(do_plant)
 
-def wait_all_grown():
+def grow_all():
+	size = get_world_size()
 	while True:
 		all_ready = True
-		size = get_world_size()
 		for x in range(size):
 			for y in range(size):
 				moves.to(x, y)
 				entity = get_entity_type()
-				if entity == Entities.Pumpkin and not can_harvest():
-					all_ready = False
+				if entity == Entities.Pumpkin:
+					if can_harvest():
+						if num_items(Items.Weird_Substance) > 0:
+							use_item(Items.Weird_Substance)
+					else:
+						if num_items(Items.Fertilizer) > 0:
+							use_item(Items.Fertilizer)
+						all_ready = False
 				elif entity == Entities.Dead_Pumpkin or entity == None:
 					plant.pumpkin()
 					all_ready = False
@@ -34,5 +40,5 @@ def harvest_all():
 
 def execute():
 	plant_all()
-	wait_all_grown()
+	grow_all()
 	harvest_all()
