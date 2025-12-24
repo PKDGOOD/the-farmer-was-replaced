@@ -1,0 +1,6 @@
+# Game save data (changes frequently)
+save.json
+
+# Python cache
+__pycache__/
+*.pyc
