@@ -6,6 +6,7 @@ import cactus_mode
 import pumpkin_mode
 import maze_mode
 import sunflower_mode
+import dino_mode
 
 def plant_by_target(target):
 	if target == Items.Hay:
@@ -26,6 +27,8 @@ def do_normal_cycle():
 
 	if target == Items.Gold:
 		maze_mode.execute()
+	elif target == Items.Bone:
+		dino_mode.execute()
 	elif target == Items.Cactus:
 		cactus_mode.execute()
 	elif target == Items.Pumpkin:
