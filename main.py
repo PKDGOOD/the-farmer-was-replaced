@@ -5,6 +5,7 @@ import v2
 import cactus_mode
 import pumpkin_mode
 import maze_mode
+import sunflower_mode
 
 def plant_by_target(target):
 	if target == Items.Hay:
@@ -20,30 +21,6 @@ def plant_by_target(target):
 	else:
 		plant.sunflower()
 
-def do_sunflower_cycle():
-	size = get_world_size()
-
-	def plant_sunflowers():
-		harvest.do()
-		plant.sunflower()
-	moves.snake_traverse(plant_sunflowers)
-
-	# 최대 꽃잎 수 찾기
-	max_petals = 0
-	for x in range(size):
-		for y in range(size):
-			moves.to(x, y)
-			p = measure()
-			if p > max_petals:
-				max_petals = p
-
-	# 최대 꽃잎인 것만 수확
-	for x in range(size):
-		for y in range(size):
-			moves.to(x, y)
-			if measure() == max_petals:
-				harvest.do()
-
 def do_normal_cycle():
 	target = v2.find_lowest_item()
 
@@ -54,13 +31,29 @@ def do_normal_cycle():
 	elif target == Items.Pumpkin:
 		pumpkin_mode.execute()
 	else:
-		def do_farm():
-			harvest.do()
-			plant_by_target(target)
-		moves.snake_traverse(do_farm)
+		# 건초, 나무, 당근 - 8개 드론 병렬
+		size = get_world_size()
+
+		def make_worker(start_x):
+			def worker():
+				for x in range(start_x, size, 8):
+					for y in range(size):
+						moves.to(x, y)
+						harvest.do()
+						plant_by_target(target)
+			return worker
+
+		spawn_drone(make_worker(1))
+		spawn_drone(make_worker(2))
+		spawn_drone(make_worker(3))
+		spawn_drone(make_worker(4))
+		spawn_drone(make_worker(5))
+		spawn_drone(make_worker(6))
+		spawn_drone(make_worker(7))
+		make_worker(0)()
 
 while True:
 	if v2.need_power():
-		do_sunflower_cycle()
+		sunflower_mode.execute()
 	else:
 		do_normal_cycle()
