@@ -3,10 +3,12 @@ import moves
 def execute():
 	size = get_world_size()
 
-	# 덤불 심고 자랄때까지 대기
+	# 기존 작물 정리 후 덤불 심기
 	moves.to(0, 0)
+	if can_harvest():
+		harvest()
 	plant(Entities.Bush)
-	while get_entity_type() != Entities.Bush:
+	while not can_harvest():
 		pass
 
 	# 미로 생성

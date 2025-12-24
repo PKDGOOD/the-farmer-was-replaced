@@ -23,10 +23,11 @@ def execute():
 					while True:
 						if can_harvest():
 							break
-						if get_entity_type() == Entities.Dead_Pumpkin:
-							plant.pumpkin()
-						elif num_items(Items.Fertilizer) > 0:
+						if num_items(Items.Fertilizer) > 0:
 							use_item(Items.Fertilizer)
+							if get_entity_type() == Entities.Dead_Pumpkin:
+								plant.pumpkin()
+								break
 		if all_ready:
 			break
 
