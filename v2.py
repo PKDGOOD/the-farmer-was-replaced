@@ -4,7 +4,8 @@ def find_lowest_item():
 		(num_items(Items.Wood), Items.Wood),
 		(num_items(Items.Carrot), Items.Carrot),
 		(num_items(Items.Pumpkin), Items.Pumpkin),
-		(num_items(Items.Cactus), Items.Cactus)
+		(num_items(Items.Cactus), Items.Cactus),
+		(num_items(Items.Gold), Items.Gold)
 	]
 	return min(items)[1]
 
