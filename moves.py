@@ -1,32 +1,31 @@
-def to(args):
-	to(args[0], args[1])
-
 def to(x, y):
 	size = get_world_size()
-	
-	target_x = x
-	if(x >= size):
-		target_x = x- size
-	
-	target_y = y
-	if(y >= size):
-		target_y = y -size
-	
-	if target_x - get_pos_x() > 0 :
-		while target_x != get_pos_x() :
+	target_x = x % size
+	target_y = y % size
+
+	while get_pos_x() != target_x:
+		if (target_x - get_pos_x()) % size <= size // 2:
 			move(East)
-	else :
-		while target_x != get_pos_x() :
+		else:
 			move(West)
-			
-	if target_y - get_pos_y() > 0 :
-		while target_y != get_pos_y() :
+
+	while get_pos_y() != target_y:
+		if (target_y - get_pos_y()) % size <= size // 2:
 			move(North)
-	else :
-		while target_y != get_pos_y() :
+		else:
 			move(South)
-			
+
+def snake_traverse(callback):
+	size = get_world_size()
+	for x in range(size):
+		if x % 2 == 0:
+			for y in range(size):
+				to(x, y)
+				callback()
+		else:
+			for y in range(size - 1, -1, -1):
+				to(x, y)
+				callback()
+
 def init():
-	to(0,0)
-			
-	
+	to(0, 0)

@@ -3,40 +3,36 @@ import plant
 import moves
 
 def plant_all():
-	size = get_world_size()
-	for x in range(size) :
-		for y in range(size) :
-			harvest.do()
-			plant.pumpkin()
-			moves.to(get_pos_x(), get_pos_y() + 1)
-		moves.to(get_pos_x() + 1, get_pos_y())
+	def do_plant():
+		harvest.do()
+		plant.pumpkin()
+	moves.snake_traverse(do_plant)
 
-def isHarvestable():
-	result = True
-	size = get_world_size()
-	for x in range(size) :
-		for y in range(size) :
-			if not can_harvest() :
-				result = False
-				plant.pumpkin()
-			moves.to(get_pos_x(), get_pos_y() + 1)
-		moves.to(get_pos_x() + 1, get_pos_y())
-	
-	if result != True:
-		isHarvestable()
-	
+def wait_all_grown():
+	while True:
+		all_ready = True
+		size = get_world_size()
+		for x in range(size):
+			for y in range(size):
+				moves.to(x, y)
+				entity = get_entity_type()
+				if entity == Entities.Pumpkin and not can_harvest():
+					all_ready = False
+				elif entity == Entities.Dead_Pumpkin or entity == None:
+					plant.pumpkin()
+					all_ready = False
+		if all_ready:
+			break
+
 def harvest_all():
-	harvest.do()
-		
+	size = get_world_size()
+	for x in range(size):
+		for y in range(size):
+			moves.to(x, y)
+			if can_harvest():
+				harvest.do()
+
 def execute():
 	plant_all()
-	
-	isHarvestable()
-		
-		
-	
+	wait_all_grown()
 	harvest_all()
-	
-	
-	
-	
