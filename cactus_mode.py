@@ -2,47 +2,44 @@ import harvest
 import plant
 import moves
 
-def plant_all():
+def execute():
+	size = get_world_size()
+
 	def do_plant():
 		harvest.do()
 		plant.cactus()
 	moves.snake_traverse(do_plant)
 
-def wait_all_grown():
-	size = get_world_size()
-	while True:
-		all_ready = True
-		for x in range(size):
-			for y in range(size):
-				moves.to(x, y)
-				if not can_harvest():
-					all_ready = False
-		if all_ready:
-			break
-
-def sort_all():
-	size = get_world_size()
-	changed = True
-	while changed:
-		changed = False
-		for x in range(size):
-			for y in range(size):
-				moves.to(x, y)
-				current = measure()
-				if x < size - 1:
-					east = measure(East)
-					if east < current:
+	# 행 정렬: 오른쪽으로 큰 값
+	def sort_rows():
+		for y in range(size):
+			for _ in range(size - 1):
+				swapped = False
+				moves.to(0, y)
+				for x in range(size - 1):
+					if measure(East) < measure():
 						swap(East)
-						changed = True
-				if y < size - 1:
-					north = measure(North)
-					if north < current:
-						swap(North)
-						changed = True
+						swapped = True
+					move(East)
+				if not swapped:
+					break
 
-def execute():
-	plant_all()
-	wait_all_grown()
-	sort_all()
+	# 열 정렬: 위로 큰 값
+	def sort_cols():
+		for x in range(size):
+			for _ in range(size - 1):
+				swapped = False
+				moves.to(x, 0)
+				for y in range(size - 1):
+					if measure(North) < measure():
+						swap(North)
+						swapped = True
+					move(North)
+				if not swapped:
+					break
+
+	sort_rows()
+	sort_cols()
+
 	moves.to(0, 0)
 	harvest.do()
