@@ -46,6 +46,20 @@ def weird_abundant():
     return num_items(Items.Weird_Substance) >= need * WEIRD_MAZE_BUFFER
 
 # ---------- parallel helper: one drone per row ----------
+def return_to_x(start_x):
+    size = get_world_size()
+    steps = 0
+    while get_pos_x() != start_x and steps < size:
+        move(West)
+        steps = steps + 1
+
+def return_to_y(start_y):
+    size = get_world_size()
+    steps = 0
+    while get_pos_y() != start_y and steps < size:
+        move(South)
+        steps = steps + 1
+
 def parallel_rows(row_fn):
     size = get_world_size()
     drones = []
@@ -54,7 +68,9 @@ def parallel_rows(row_fn):
         if d:
             drones.append(d)
         else:
+            start_x = get_pos_x()
             row_fn()                 # no drone free -> do this row myself
+            return_to_x(start_x)
         move(North)
     for d in drones:
         wait_for(d)
@@ -68,7 +84,9 @@ def parallel_cols(col_fn):
         if d:
             drones.append(d)
         else:
+            start_y = get_pos_y()
             col_fn()
+            return_to_y(start_y)
         move(East)
     for d in drones:
         wait_for(d)
@@ -82,7 +100,9 @@ def parallel_rows_arg(row_fn, arg):
         if d:
             drones.append(d)
         else:
+            start_x = get_pos_x()
             row_fn(arg)
+            return_to_x(start_x)
         move(North)
     for d in drones:
         wait_for(d)
