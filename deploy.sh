@@ -12,7 +12,9 @@ DST="/Users/dion/Library/Application Support/com.TheFarmerWasReplaced.TheFarmerW
 cp "$SRC"/*.py "$DST"/
 
 # Guard: refuse to deploy any .py containing non-ASCII (would break the editor).
-if LC_ALL=C grep -lP '[^\x00-\x7F]' "$DST"/*.py 2>/dev/null; then
+NON_ASCII=$(perl -ne 'if (/[^[:ascii:]]/) { print "$ARGV\n"; close ARGV }' "$DST"/*.py | sort -u)
+if [ -n "$NON_ASCII" ]; then
+    echo "$NON_ASCII"
     echo "ERROR: non-ASCII found in deployed .py above. The in-game editor will break." >&2
     exit 1
 fi

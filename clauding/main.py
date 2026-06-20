@@ -283,6 +283,92 @@ def make_maze():
         tries = tries + 1
     return use_item(Items.Weird_Substance, need)   # True iff the maze was created
 
+def maze_key(x, y):
+    return x * get_world_size() + y
+
+def seen_key(keys, key):
+    for k in keys:
+        if k == key:
+            return True
+    return False
+
+def step_x(x, d):
+    size = get_world_size()
+    if d == 1:
+        return (x + 1) % size
+    if d == 3:
+        return (x + size - 1) % size
+    return x
+
+def step_y(y, d):
+    size = get_world_size()
+    if d == 0:
+        return (y + 1) % size
+    if d == 2:
+        return (y + size - 1) % size
+    return y
+
+def wrap_dist(a, b):
+    size = get_world_size()
+    d = abs(a - b)
+    w = size - d
+    if w < d:
+        return w
+    return d
+
+def maze_dist(x, y, tx, ty):
+    return wrap_dist(x, tx) + wrap_dist(y, ty)
+
+def choose_maze_dir(tx, ty, seen):
+    dirs = [North, East, South, West]
+    x = get_pos_x()
+    y = get_pos_y()
+    best = -1
+    best_d = 1000000
+    for d in range(4):
+        if can_move(dirs[d]):
+            nx = step_x(x, d)
+            ny = step_y(y, d)
+            key = maze_key(nx, ny)
+            if not seen_key(seen, key):
+                md = maze_dist(nx, ny, tx, ty)
+                if best == -1 or md < best_d:
+                    best = d
+                    best_d = md
+    return best
+
+def guided_searcher():
+    target = measure()
+    if target == None:
+        return False
+    tx, ty = target
+    dirs = [North, East, South, West]
+    seen = []
+    stack = []
+    steps = 0
+    limit = get_world_size() * get_world_size() * 8
+    while get_entity_type() != Entities.Treasure and steps < limit:
+        key = maze_key(get_pos_x(), get_pos_y())
+        if not seen_key(seen, key):
+            seen.append(key)
+        d = choose_maze_dir(tx, ty, seen)
+        if d != -1:
+            stack.append(d)
+            move(dirs[d])
+        elif len(stack) > 0:
+            back = (stack.pop() + 2) % 4
+            if can_move(dirs[back]):
+                move(dirs[back])
+            else:
+                return False
+        else:
+            return False
+        steps = steps + 1
+    if get_entity_type() == Entities.Treasure:
+        harvest()
+        return True
+    return False
+
 # one wall-following searcher; args passed via spawn_drone (no closures).
 # Stops early if another drone already grabbed the treasure (gold went up).
 def searcher(start_dir, use_right_hand):
@@ -322,6 +408,8 @@ def searcher(start_dir, use_right_hand):
 
 def maze_run():
     if not make_maze():
+        return
+    if guided_searcher():
         return
     # 4 directions x 2 hand-rules race to the treasure from the entrance
     drones = []
@@ -416,6 +504,8 @@ def fundable(cost):
 def run():
     while True:
         quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance), "power", num_items(Items.Power))
+        if num_unlocked(Unlocks.Leaderboard) > 0:
+            return
         # 0. keep power topped up -> the engine consumes it for a GLOBAL 2x speed
         #    on every other action. Do this first so everything below runs at 2x.
         if num_items(Items.Power) < POWER_FLOOR and afford_plant(Entities.Sunflower):
@@ -442,7 +532,5 @@ def run():
             produce(worst_item(get_cost(best)))   # fundable -> always real progress
         else:
             produce(Items.Gold)            # nothing fundable -> run pump/weird/maze pipeline
-
-run()
 
 run()
