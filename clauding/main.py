@@ -179,9 +179,10 @@ def basic_tile(target):
 
 def basic_row(target):
     size = get_world_size()
-    for i in range(size):
+    for i in range(size - 1):
         basic_tile(target)
         move(East)
+    basic_tile(target)
 
 def basic_sweep(target):
     parallel_rows_arg(basic_row, target)
@@ -243,7 +244,7 @@ def pumpkin_row():
     while not done and passes < 40:
         passes = passes + 1
         done = True
-        for i in range(size):
+        for i in range(size - 1):
             if get_ground_type() == Grounds.Grassland:
                 till()
             e = get_entity_type()
@@ -259,6 +260,20 @@ def pumpkin_row():
                 if num_items(Items.Fertilizer) > 0 and not weird_abundant():
                     use_item(Items.Fertilizer)
             move(East)
+        if get_ground_type() == Grounds.Grassland:
+            till()
+        e = get_entity_type()
+        if e == Entities.Pumpkin and can_harvest():
+            pass
+        else:
+            done = False
+            if e == None or e == Entities.Dead_Pumpkin:
+                if not afford_plant_many(Entities.Pumpkin, size):
+                    return
+                if not plant(Entities.Pumpkin):
+                    return
+            if num_items(Items.Fertilizer) > 0 and not weird_abundant():
+                use_item(Items.Fertilizer)
 
 def pumpkin_mega_once():
     clear()
@@ -279,7 +294,7 @@ def pumpkin_batch():
 # harvest cascades over every cactus. Both sort phases run one drone per line.
 def cactus_plant_row():
     size = get_world_size()
-    for i in range(size):
+    for i in range(size - 1):
         if can_harvest():
             harvest()                    # clear grown grass so the tile is empty
         if get_ground_type() == Grounds.Grassland:
@@ -289,6 +304,14 @@ def cactus_plant_row():
         if num_items(Items.Water) > 0 and get_water() < 0.8:
             use_item(Items.Water)
         move(East)
+    if can_harvest():
+        harvest()
+    if get_ground_type() == Grounds.Grassland:
+        till()
+    if get_entity_type() == None and afford_plant_many(Entities.Cactus, size):
+        plant(Entities.Cactus)
+    if num_items(Items.Water) > 0 and get_water() < 0.8:
+        use_item(Items.Water)
 
 def sort_row():
     size = get_world_size()
@@ -345,7 +368,7 @@ POWER_MIN_ROUND_GAIN = 40
 
 def sun_plant_row():
     size = get_world_size()
-    for i in range(size):
+    for i in range(size - 1):
         if get_ground_type() == Grounds.Grassland:
             till()
         if get_entity_type() == None and afford_plant_many(Entities.Sunflower, size):
@@ -353,16 +376,26 @@ def sun_plant_row():
         if num_items(Items.Water) > 0 and get_water() < 0.8:
             use_item(Items.Water)
         move(East)
+    if get_ground_type() == Grounds.Grassland:
+        till()
+    if get_entity_type() == None and afford_plant_many(Entities.Sunflower, size):
+        plant(Entities.Sunflower)
+    if num_items(Items.Water) > 0 and get_water() < 0.8:
+        use_item(Items.Water)
 
 def row_max_petals():                     # parallel-reduction worker: returns row max
     size = get_world_size()
     m = 0
-    for i in range(size):
+    for i in range(size - 1):
         if can_harvest():
             p = measure()
             if p != None and p > m:
                 m = p
         move(East)
+    if can_harvest():
+        p = measure()
+        if p != None and p > m:
+            m = p
     return m
 
 def field_max_petals():
@@ -386,12 +419,16 @@ def field_max_petals():
 
 def harvest_max_row(m):                   # harvest only grown sunflowers at the field max
     size = get_world_size()
-    for i in range(size):
+    for i in range(size - 1):
         if can_harvest() and measure() == m:
             harvest()                     # 8x power (m is max; the rest stay -> >=10)
             if afford_plant_many(Entities.Sunflower, size):
                 plant(Entities.Sunflower)
         move(East)
+    if can_harvest() and measure() == m:
+        harvest()
+        if afford_plant_many(Entities.Sunflower, size):
+            plant(Entities.Sunflower)
 
 def power_gen():
     clear()
