@@ -583,27 +583,51 @@ def fundable(cost):
             return False
     return True
 
-def stock_target(item):
+def pumpkin_unit():
+    size = get_world_size()
+    if size < 6:
+        return size * size * size
+    return 6 * size * size
+
+def cactus_unit():
+    size = get_world_size()
+    tiles = size * size
+    return tiles * tiles
+
+def gold_unit():
+    size = get_world_size()
+    return size * size * 2 ** (num_unlocked(Unlocks.Mazes) - 1)
+
+def power_unit():
+    size = get_world_size()
+    # Expected full-field max-petal bonus harvest is about 15*8*(tiles/9).
+    return size * size * 13
+
+def stock_unit(item):
+    size = get_world_size()
+    tiles = size * size
     if item == Items.Hay:
-        return 250000
+        return tiles / 3
     if item == Items.Wood:
-        return 250000
+        return tiles * 5 / 3
     if item == Items.Carrot:
-        return 150000
+        return tiles / 3
     if item == Items.Pumpkin:
-        return 25000
+        return pumpkin_unit()
     if item == Items.Cactus:
-        return 100000
+        return cactus_unit()
     if item == Items.Weird_Substance:
-        return 50000
+        return pumpkin_unit()
     if item == Items.Gold:
-        return 50000
+        return gold_unit()
     if item == Items.Bone:
-        return 10000
+        return BONE_APPLES * BONE_APPLES
+    if item == Items.Power:
+        return power_unit()
     return 1
 
 def stock_score(item):
-    return num_items(item) / stock_target(item)
+    return num_items(item) / stock_unit(item)
 
 def stockpile_item():
     items = [Items.Hay, Items.Wood, Items.Carrot, Items.Pumpkin,
