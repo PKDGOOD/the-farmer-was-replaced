@@ -30,6 +30,20 @@ def parallel_rows(row_fn):
     for d in drones:
         wait_for(d)
 
+# one drone per column (spawn along the bottom row, moving East)
+def parallel_cols(col_fn):
+    size = get_world_size()
+    drones = []
+    for i in range(size):
+        d = spawn_drone(col_fn)
+        if d:
+            drones.append(d)
+        else:
+            col_fn()
+        move(East)
+    for d in drones:
+        wait_for(d)
+
 # ---------- balanced farm (carrot / wood / hay) ----------
 def balanced_tile():
     if can_harvest():
@@ -94,6 +108,59 @@ def pumpkin_batch():
             balanced_sweep()
             tries = tries + 1
     pumpkin_mega_once()
+
+# ---------- cactus: sort the grid, harvest cascades (size^2)^2 ----------
+# Row-sort ascending East, then column-sort ascending North. Sorting rows then
+# columns leaves the rows sorted too, so the whole grid ends up sorted and one
+# harvest cascades over every cactus. Both sort phases run one drone per line.
+def cactus_plant_row():
+    size = get_world_size()
+    for i in range(size):
+        if get_ground_type() == Grounds.Grassland:
+            till()
+        if get_entity_type() == None:
+            plant(Entities.Cactus)
+        if num_items(Items.Water) > 0 and get_water() < 0.8:
+            use_item(Items.Water)
+        move(East)
+
+def sort_row():
+    size = get_world_size()
+    for p in range(size - 1):
+        swapped = False
+        for i in range(size - 1):
+            if measure() > measure(East):
+                swap(East)
+                swapped = True
+            move(East)
+        for i in range(size - 1):
+            move(West)
+        if not swapped:
+            break
+
+def sort_col():
+    size = get_world_size()
+    for p in range(size - 1):
+        swapped = False
+        for i in range(size - 1):
+            if measure() > measure(North):
+                swap(North)
+                swapped = True
+            move(North)
+        for i in range(size - 1):
+            move(South)
+        if not swapped:
+            break
+
+def cactus_once():
+    clear()
+    parallel_rows(cactus_plant_row)
+    parallel_rows(sort_row)
+    parallel_cols(sort_col)
+    while not can_harvest():              # ensure (0,0) grown before harvest
+        if num_items(Items.Fertilizer) > 0:
+            use_item(Items.Fertilizer)
+    harvest()                             # sorted + grown -> full cascade
 
 # ---------- maze -> gold (single drone) ----------
 def maze_substance_need():
@@ -169,6 +236,9 @@ def produce(item):
     if item == Items.Weird_Substance or item == Items.Pumpkin:
         pumpkin_batch()
         return True
+    if item == Items.Cactus:
+        cactus_once()
+        return True
     if item == Items.Hay or item == Items.Wood or item == Items.Carrot:
         balanced_sweep()
         return True
@@ -199,28 +269,65 @@ def buy_upgrades():
             unlock(u)
 
 def target_list():
-    return [Unlocks.Simulation, Unlocks.Dinosaurs, Unlocks.Leaderboard]
+    return [Unlocks.Dinosaurs, Unlocks.Leaderboard]
+
+# real-time stock reserves: keep each resource at/above these. Each cycle the
+# engine tops up whatever is MOST depleted first (scarcest-first), so it mixes
+# crops dynamically based on live inventory instead of tunneling on one.
+def reserve_for(item):
+    if item == Items.Cactus:
+        return 2000
+    if item == Items.Pumpkin:
+        return 2000
+    if item == Items.Weird_Substance:
+        return 400
+    if item == Items.Carrot:
+        return 1000
+    if item == Items.Wood:
+        return 400
+    return 0
+
+def scarcest():
+    items = [Items.Cactus, Items.Pumpkin, Items.Weird_Substance, Items.Carrot, Items.Wood]
+    worst = None
+    worst_ratio = 1.0
+    for it in items:
+        target = reserve_for(it)
+        if num_items(it) < target:
+            ratio = num_items(it) / target
+            if ratio < worst_ratio:
+                worst_ratio = ratio
+                worst = it
+    return worst
 
 def run():
     blocked = set()
     while True:
+        # tick-efficiency log (free: get_tick_count/quick_print are 0 ticks) ->
+        # read it on the Output page / output.txt to watch ticks vs stocks.
+        quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance))
         buy_upgrades()
         target = None
         for t in target_list():
             if num_unlocked(t) == 0 and get_cost(t) != None and not (t in blocked):
                 target = t
                 break
-        if target == None:
-            balanced_sweep()
-            blocked = set()
-            continue
-        cost = get_cost(target)
-        if affordable(cost):
+        # unlock the moment it is affordable
+        if target != None and affordable(get_cost(target)):
             if not unlock(target):
                 blocked.add(target)
-        else:
-            item = worst_item(cost)
-            if not produce(item):
+            continue
+        # DYNAMIC: top up the most-depleted resource first (live stock check)
+        item = scarcest()
+        if item != None:
+            produce(item)
+            continue
+        # reserves all met -> fund the next unlock's bottleneck, or idle-farm
+        if target != None:
+            if not produce(worst_item(get_cost(target))):
                 blocked.add(target)
+        else:
+            balanced_sweep()
+            blocked = set()
 
 run()
