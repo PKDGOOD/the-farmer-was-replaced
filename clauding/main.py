@@ -493,11 +493,10 @@ def cactus_once():
     if can_harvest():
         harvest()                         # sorted + grown -> full cascade
 
-# ---------- sunflowers -> power (8x max-petal) -> global 2x speed ----------
-POWER_FLOOR = 250
-POWER_TARGET = 700
-POWER_ROUNDS = 4
-POWER_MIN_ROUND_GAIN = 40
+# ---------- sunflowers -> power fuel ----------
+POWER_FLOOR = 400
+POWER_TARGET = 1200
+POWER_CYCLES = 2
 
 def sun_plant_row():
     size = get_world_size()
@@ -516,19 +515,17 @@ def sun_plant_row():
     if num_items(Items.Water) > 0 and get_water() < 0.8:
         use_item(Items.Water)
 
-def row_max_petals():                     # parallel-reduction worker: returns row max
+def row_max_petals():                     # petals can be measured before maturity
     size = get_world_size()
     m = 0
     for i in range(size - 1):
-        if can_harvest():
-            p = measure()
-            if p != None and p > m:
-                m = p
-        move(East)
-    if can_harvest():
         p = measure()
         if p != None and p > m:
             m = p
+        move(East)
+    p = measure()
+    if p != None and p > m:
+        m = p
     return m
 
 def field_max_petals():
@@ -540,7 +537,9 @@ def field_max_petals():
         if d:
             drones.append(d)
         else:
+            start_x = get_pos_x()
             r = row_max_petals()
+            return_to_x(start_x)
             if r > m:
                 m = r
         move(North)
@@ -550,34 +549,72 @@ def field_max_petals():
             m = r
     return m
 
-def harvest_max_row(m):                   # harvest only grown sunflowers at the field max
+def sun_ready_row():
+    size = get_world_size()
+    c = 0
+    for i in range(size - 1):
+        if can_harvest():
+            c = c + 1
+        move(East)
+    if can_harvest():
+        c = c + 1
+    return c
+
+def field_ready_sunflowers():
+    size = get_world_size()
+    drones = []
+    total = 0
+    for i in range(size):
+        d = spawn_drone(sun_ready_row)
+        if d:
+            drones.append(d)
+        else:
+            start_x = get_pos_x()
+            total = total + sun_ready_row()
+            return_to_x(start_x)
+        move(North)
+    for d in drones:
+        total = total + wait_for(d)
+    return total
+
+def wait_sunflowers_ready():
+    tiles = get_world_size() * get_world_size()
+    checks = 0
+    while checks < 8:
+        if field_ready_sunflowers() >= tiles:
+            return True
+        checks = checks + 1
+    return field_ready_sunflowers() >= 10
+
+def harvest_max_row(m):                   # one bonus pass; do not replant/loop
     size = get_world_size()
     for i in range(size - 1):
         if can_harvest() and measure() == m:
-            harvest()                     # 8x power (m is max; the rest stay -> >=10)
-            if afford_plant_many(Entities.Sunflower, size):
-                plant(Entities.Sunflower)
+            harvest()
         move(East)
     if can_harvest() and measure() == m:
         harvest()
-        if afford_plant_many(Entities.Sunflower, size):
-            plant(Entities.Sunflower)
+
+def harvest_sun_row():
+    size = get_world_size()
+    for i in range(size - 1):
+        if can_harvest():
+            harvest()
+        move(East)
+    if can_harvest():
+        harvest()
 
 def power_gen():
-    clear()
-    parallel_rows(sun_plant_row)          # whole field of sunflowers + watered
-    r = 0
-    while r < POWER_ROUNDS:
-        if num_items(Items.Power) >= POWER_TARGET:
-            break
-        before = num_items(Items.Power)
+    cycles = 0
+    while cycles < POWER_CYCLES and num_items(Items.Power) < POWER_TARGET:
+        clear()
+        parallel_rows(sun_plant_row)
         m = field_max_petals()
-        if m > 0:
+        wait_sunflowers_ready()
+        if m > 0 and get_world_size() * get_world_size() >= 10:
             parallel_rows_arg(harvest_max_row, m)
-        after = num_items(Items.Power)
-        if after - before < POWER_MIN_ROUND_GAIN:
-            break
-        r = r + 1
+        parallel_rows(harvest_sun_row)
+        cycles = cycles + 1
 
 # ---------- maze -> gold (single drone) ----------
 def maze_substance_need():
