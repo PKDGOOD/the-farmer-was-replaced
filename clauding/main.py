@@ -116,10 +116,12 @@ def pumpkin_batch():
 def cactus_plant_row():
     size = get_world_size()
     for i in range(size):
+        if can_harvest():
+            harvest()                    # clear grown grass so the tile is empty
         if get_ground_type() == Grounds.Grassland:
-            till()
+            till()                        # soil -> grass cannot regrow here
         if get_entity_type() == None:
-            plant(Entities.Cactus)
+            plant(Entities.Cactus)        # every tile must end up a cactus
         if num_items(Items.Water) > 0 and get_water() < 0.8:
             use_item(Items.Water)
         move(East)
@@ -129,7 +131,9 @@ def sort_row():
     for p in range(size - 1):
         swapped = False
         for i in range(size - 1):
-            if measure() > measure(East):
+            a = measure()
+            b = measure(East)
+            if a != None and b != None and a > b:   # guard: skip non-cactus
                 swap(East)
                 swapped = True
             move(East)
@@ -143,7 +147,9 @@ def sort_col():
     for p in range(size - 1):
         swapped = False
         for i in range(size - 1):
-            if measure() > measure(North):
+            a = measure()
+            b = measure(North)
+            if a != None and b != None and a > b:
                 swap(North)
                 swapped = True
             move(North)
@@ -260,12 +266,19 @@ def worst_item(cost):
             worst = item
     return worst
 
-# buy compounding upgrades whenever surplus already covers them
+# buy compounding upgrades, but NEVER spend gold/weird on them (those are the
+# scarce unlock fuel) -- only crop-funded upgrades from surplus.
+def upgrade_uses_scarce(cost):
+    for item in cost:
+        if item == Items.Gold or item == Items.Weird_Substance:
+            return True
+    return False
+
 def buy_upgrades():
     ups = [Unlocks.Megafarm, Unlocks.Speed]
     for u in ups:
         cost = get_cost(u)
-        if cost != None and affordable(cost):
+        if cost != None and affordable(cost) and not upgrade_uses_scarce(cost):
             unlock(u)
 
 def target_list():
@@ -275,30 +288,29 @@ def target_list():
 # engine tops up whatever is MOST depleted first (scarcest-first), so it mixes
 # crops dynamically based on live inventory instead of tunneling on one.
 def reserve_for(item):
-    if item == Items.Cactus:
-        return 2000
-    if item == Items.Pumpkin:
-        return 2000
+    if item == Items.Gold:
+        return 3000
     if item == Items.Weird_Substance:
-        return 400
+        return 1500
+    if item == Items.Pumpkin:
+        return 1500
     if item == Items.Carrot:
-        return 1000
+        return 1500
+    if item == Items.Cactus:
+        return 500
     if item == Items.Wood:
         return 400
     return 0
 
+# explicit priority order (not a ratio): produce the FIRST resource below its
+# reserve. Gold/Weird come first so the gold pipeline never starves; cactus is
+# low priority so it can't crowd out gold (it sits at 0 with ratio 0 otherwise).
 def scarcest():
-    items = [Items.Cactus, Items.Pumpkin, Items.Weird_Substance, Items.Carrot, Items.Wood]
-    worst = None
-    worst_ratio = 1.0
-    for it in items:
-        target = reserve_for(it)
-        if num_items(it) < target:
-            ratio = num_items(it) / target
-            if ratio < worst_ratio:
-                worst_ratio = ratio
-                worst = it
-    return worst
+    order = [Items.Gold, Items.Weird_Substance, Items.Pumpkin, Items.Carrot, Items.Cactus, Items.Wood]
+    for it in order:
+        if num_items(it) < reserve_for(it):
+            return it
+    return None
 
 def run():
     blocked = set()
