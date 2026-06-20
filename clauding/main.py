@@ -403,7 +403,7 @@ def run():
         quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance), "power", num_items(Items.Power))
         # 0. keep power topped up -> the engine consumes it for a GLOBAL 2x speed
         #    on every other action. Do this first so everything below runs at 2x.
-        if num_items(Items.Power) < POWER_FLOOR:
+        if num_items(Items.Power) < POWER_FLOOR and afford_plant(Entities.Sunflower):
             power_gen()
             continue
         # 1. buy every currently affordable upgrade/unlock (compounding)
