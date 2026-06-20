@@ -19,9 +19,11 @@ def farm_tile():
         if num_items(Items.Water) > 0 and get_water() < 0.5:
             use_item(Items.Water)
     elif k == 1:
-        # Wood: 덤불(soil/grassland 둘 다 자람)
+        # Wood: 나무(그루당 Wood 5). (x+y)%3==1 타일은 직교 인접이 없어 성장 페널티 0.
+        #       나무 심기 실패(자원 부족 등) 시 무료 덤불로 폴백.
         if get_entity_type() == None:
-            plant(Entities.Bush)
+            if not plant(Entities.Tree):
+                plant(Entities.Bush)
     else:
         # Hay: grassland으로 되돌리고 비워두면 잔디 자동 성장
         if get_ground_type() == Grounds.Soil:
