@@ -1,10 +1,16 @@
-# clauding 플레이스루 — Stage 0: 1x1 잔디밭에서 Hay 파밍
+# clauding 플레이스루 — Stage 2: Wood 파밍 (덤불 심고 수확)
 # ------------------------------------------------------------
-# 현재 언락: harvest / do_a_flip / pass 뿐 (Loops·Senses·Variables 없음)
-# 선행 조건: 언락 메뉴에서 Loops 구입 (Hay 5개)  ← 지금 Hay가 정확히 5개
+# 가용 언락: while, if/else, can_harvest, move(E/N/S/W), plant(Bush), clear, speed
+# 아직 없음: variables, operators, senses(get_pos/get_world_size), functions, for, till
 #
-# Senses가 없어 can_harvest() 게이팅이 불가하므로 단순 반복 수확.
-# 안 자란 잔디 harvest()는 실패(1틱), 다 자란 잔디는 성공(200틱)이라 루프가 자체 페이싱됨.
-# Hay가 다음 언락 비용만큼 모이면 정지(stop) 후 다음 단계로 진행.
+# 다음 언락(Carrots/Trees 등)이 Wood를 요구 → 덤불(무료)을 심어 Wood 확보.
+# 매 타일: 수확 가능하면 수확(다 자란 덤불=Wood, 잔디=Hay), 이어서 덤불 심기(빈칸 채움;
+#          이미 덤불 있으면 plant 실패=1틱). move(East)로 한 행을 계속 순회.
+#
+# Senses 확보 시 → 2D 전체 순회 + Tree(체커보드, 그루당 Wood 5)로 교체 예정.
+# Wood가 다음 언락 비용만큼 모이면 정지 후 다음 언락 진행.
 while True:
-    harvest()
+    if can_harvest():
+        harvest()
+    plant(Entities.Bush)
+    move(East)
