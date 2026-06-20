@@ -284,6 +284,26 @@ def deficit(cost):
             d = short
     return d
 
+# can produce() actually make this item? (mirror of produce's handled items)
+def can_produce(item):
+    if item == Items.Gold:
+        return True
+    if item == Items.Weird_Substance or item == Items.Pumpkin:
+        return True
+    if item == Items.Cactus:
+        return True
+    if item == Items.Hay or item == Items.Wood or item == Items.Carrot:
+        return True
+    return False
+
+# is every still-missing item of this cost something we can farm? If not (e.g.
+# it needs Bone), pursuing it would stack gold forever without ever affording it.
+def fundable(cost):
+    for item in cost:
+        if num_items(item) < cost[item] and not can_produce(item):
+            return False
+    return True
+
 # NO reserve caps. Buy everything affordable, then accumulate without limit
 # toward the NEAREST unaffordable upgrade/unlock. Basic crops are already
 # abundant so they are never the bottleneck -> the bot keeps stacking the
@@ -296,21 +316,22 @@ def run():
             c = get_cost(t)
             if c != None and affordable(c):
                 unlock(t)
-        # 2. farm toward the closest-to-affordable target (unbounded accumulation)
+        # 2. farm toward the closest-to-affordable FUNDABLE target (no caps).
+        #    Skip targets whose bottleneck we can't farm (e.g. needs Bone) so we
+        #    never get stuck stacking gold while that target stays unaffordable.
         best = None
         best_d = 0
         for t in all_targets():
             c = get_cost(t)
-            if c != None and not affordable(c):
+            if c != None and not affordable(c) and fundable(c):
                 dd = deficit(c)
                 if best == None or dd < best_d:
                     best = t
                     best_d = dd
         if best != None:
-            if not produce(worst_item(get_cost(best))):
-                produce(Items.Gold)        # bottleneck unfarmable -> stack gold
+            produce(worst_item(get_cost(best)))   # fundable -> always real progress
         else:
-            produce(Items.Gold)            # all affordable bought -> stack gold
+            produce(Items.Gold)            # nothing fundable -> run pump/weird/maze pipeline
 
 run()
 
