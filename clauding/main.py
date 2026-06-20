@@ -41,7 +41,10 @@ def balanced_sweep():
             move(North)
         move(East)
 
-# --- one whole-farm mega-pumpkin cycle ---
+# --- one whole-farm mega-pumpkin cycle, fertilizer-assisted ---
+# Fertilizer matures each pumpkin in place: it resolves the 20% death roll on
+# the spot (so no extra scan passes) AND infects the pumpkin, turning half the
+# mega yield into Items.Weird_Substance -- our maze fuel (intentional).
 def pumpkin_mega_once():
     size = get_world_size()
     while True:
@@ -49,17 +52,27 @@ def pumpkin_mega_once():
         for x in range(size):
             for y in range(size):
                 if can_harvest() and get_entity_type() == Entities.Pumpkin:
-                    pass
+                    pass                                  # grown pumpkin: done
                 else:
                     ready = False
                     if can_harvest():
                         harvest()
                     if get_ground_type() == Grounds.Grassland:
                         till()
-                    e = get_entity_type()
-                    if e == None or e == Entities.Dead_Pumpkin:
-                        if not plant(Entities.Pumpkin):
-                            return
+                    # plant + fertilize to a grown survivor in place (bounded;
+                    # falls back to natural growth if fertilizer runs out)
+                    tries = 0
+                    while tries < 6:
+                        e = get_entity_type()
+                        if e == Entities.Pumpkin and can_harvest():
+                            break
+                        if e == None or e == Entities.Dead_Pumpkin:
+                            if not plant(Entities.Pumpkin):
+                                return                    # out of carrots
+                        if num_items(Items.Fertilizer) <= 0:
+                            break
+                        use_item(Items.Fertilizer)
+                        tries = tries + 1
                 move(North)
             move(East)
         if ready:
@@ -78,8 +91,8 @@ def pumpkin_batch():
 
 # returns True if it knows how to produce this item, else False
 def farm_item(item):
-    if item == Items.Pumpkin:
-        pumpkin_batch()
+    if item == Items.Pumpkin or item == Items.Weird_Substance:
+        pumpkin_batch()       # fertilized pumpkins yield pumpkin + weird_substance
         return True
     if item == Items.Hay or item == Items.Wood or item == Items.Carrot:
         balanced_sweep()
