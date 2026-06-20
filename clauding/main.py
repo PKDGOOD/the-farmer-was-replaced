@@ -13,6 +13,7 @@ WOOD_MIN = 20
 CARROT_HIGH = 250
 BONE_CACTUS_MIN = 2000
 BONE_APPLES = 80
+AUTO_BONE = False
 
 def water_if_dry():
     if num_items(Items.Water) > 0 and get_water() < 0.5:
@@ -637,7 +638,7 @@ def stock_score(item):
 def stockpile_item():
     items = [Items.Hay, Items.Wood, Items.Carrot, Items.Pumpkin,
              Items.Cactus, Items.Weird_Substance, Items.Gold]
-    if num_unlocked(Unlocks.Dinosaurs) > 0:
+    if AUTO_BONE and num_unlocked(Unlocks.Dinosaurs) > 0:
         items.append(Items.Bone)
     best = None
     best_s = 0
@@ -656,7 +657,7 @@ def stockpile_item():
 # first because it doubles every other productive action.
 def run():
     while True:
-        quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance), "power", num_items(Items.Power))
+        quick_print(get_tick_count(), "gold", num_items(Items.Gold), "bone", num_items(Items.Bone), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance), "power", num_items(Items.Power))
         # 0. keep power topped up -> the engine consumes it for a GLOBAL 2x speed
         #    on every other action. Do this first so everything below runs at 2x.
         if num_items(Items.Power) < POWER_FLOOR and afford_plant(Entities.Sunflower):
