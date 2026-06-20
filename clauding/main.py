@@ -11,6 +11,8 @@
 
 WOOD_MIN = 20
 CARROT_HIGH = 250
+BONE_CACTUS_MIN = 2000
+BONE_APPLES = 80
 
 def water_if_dry():
     if num_items(Items.Water) > 0 and get_water() < 0.5:
@@ -95,6 +97,52 @@ def balanced_row():
 
 def balanced_sweep():
     parallel_rows(balanced_row)
+
+# ---------- dinosaur -> bone ----------
+def dino_step_toward(tx, ty):
+    if get_pos_x() < tx and move(East):
+        return True
+    if get_pos_x() > tx and move(West):
+        return True
+    if get_pos_y() < ty and move(North):
+        return True
+    if get_pos_y() > ty and move(South):
+        return True
+    if move(North):
+        return True
+    if move(East):
+        return True
+    if move(South):
+        return True
+    if move(West):
+        return True
+    return False
+
+def bone_run():
+    if num_items(Items.Cactus) < BONE_CACTUS_MIN:
+        cactus_once()
+        return
+    clear()
+    change_hat(Hats.Dinosaur_Hat)
+    apples = 0
+    tries = 0
+    while apples < BONE_APPLES and tries < BONE_APPLES * 80:
+        pos = measure()
+        if pos == None:
+            break
+        tx, ty = pos
+        if get_pos_x() == tx and get_pos_y() == ty:
+            if not dino_step_toward(tx, ty):
+                break
+            apples = apples + 1
+        else:
+            if dino_step_toward(tx, ty):
+                if get_pos_x() == tx and get_pos_y() == ty:
+                    apples = apples + 1
+            else:
+                break
+        tries = tries + 1
+    change_hat(Hats.Gray_Hat)
 
 # ---------- mega-pumpkin (parallel rows, fertilizer in place) ----------
 def pumpkin_row():
@@ -465,6 +513,9 @@ def produce(item):
         else:
             maze_run()
         return True
+    if item == Items.Bone:
+        bone_run()
+        return True
     if item == Items.Weird_Substance or item == Items.Pumpkin:
         pumpkin_batch()
         return True
@@ -514,6 +565,8 @@ def deficit(cost):
 def can_produce(item):
     if item == Items.Gold:
         return True
+    if item == Items.Bone:
+        return num_unlocked(Unlocks.Dinosaurs) > 0
     if item == Items.Weird_Substance or item == Items.Pumpkin:
         return True
     if item == Items.Cactus:
@@ -530,15 +583,51 @@ def fundable(cost):
             return False
     return True
 
-# NO reserve caps. Buy everything affordable, then accumulate without limit
-# toward the NEAREST unaffordable upgrade/unlock. Basic crops are already
-# abundant so they are never the bottleneck -> the bot keeps stacking the
-# valuable resources (gold/cactus/pumpkin/...) the next upgrade actually needs.
+def stock_target(item):
+    if item == Items.Hay:
+        return 250000
+    if item == Items.Wood:
+        return 250000
+    if item == Items.Carrot:
+        return 150000
+    if item == Items.Pumpkin:
+        return 25000
+    if item == Items.Cactus:
+        return 100000
+    if item == Items.Weird_Substance:
+        return 50000
+    if item == Items.Gold:
+        return 50000
+    if item == Items.Bone:
+        return 10000
+    return 1
+
+def stock_score(item):
+    return num_items(item) / stock_target(item)
+
+def stockpile_item():
+    items = [Items.Hay, Items.Wood, Items.Carrot, Items.Pumpkin,
+             Items.Cactus, Items.Weird_Substance, Items.Gold]
+    if num_unlocked(Unlocks.Dinosaurs) > 0:
+        items.append(Items.Bone)
+    best = None
+    best_s = 0
+    for item in items:
+        if can_produce(item):
+            s = stock_score(item)
+            if best == None or s < best_s:
+                best = item
+                best_s = s
+    if best == None:
+        return Items.Gold
+    return best
+
+# Buy every affordable upgrade/unlock, then keep all producible resources growing
+# by farming the lowest normalized stockpile. Power is kept as a large reserve
+# first because it doubles every other productive action.
 def run():
     while True:
         quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance), "power", num_items(Items.Power))
-        if num_unlocked(Unlocks.Leaderboard) > 0:
-            return
         # 0. keep power topped up -> the engine consumes it for a GLOBAL 2x speed
         #    on every other action. Do this first so everything below runs at 2x.
         if num_items(Items.Power) < POWER_FLOOR and afford_plant(Entities.Sunflower):
@@ -549,21 +638,7 @@ def run():
             c = get_cost(t)
             if c != None and affordable(c):
                 unlock(t)
-        # 2. farm toward the closest-to-affordable FUNDABLE target (no caps).
-        #    Skip targets whose bottleneck we can't farm (e.g. needs Bone) so we
-        #    never get stuck stacking gold while that target stays unaffordable.
-        best = None
-        best_d = 0
-        for t in all_targets():
-            c = get_cost(t)
-            if c != None and not affordable(c) and fundable(c):
-                dd = deficit(c)
-                if best == None or dd < best_d:
-                    best = t
-                    best_d = dd
-        if best != None:
-            produce(worst_item(get_cost(best)))   # fundable -> always real progress
-        else:
-            produce(Items.Gold)            # nothing fundable -> run pump/weird/maze pipeline
+        # 2. Rotate stockpiles by normalized inventory so no resource falls behind.
+        produce(stockpile_item())
 
 run()
