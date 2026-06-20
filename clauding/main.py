@@ -60,23 +60,27 @@ def balanced_sweep():
 
 # ---------- mega-pumpkin (parallel rows, fertilizer in place) ----------
 def pumpkin_row():
+    # re-walk this row until every tile is a grown pumpkin. Fertilizer matures
+    # in place (and makes weird_substance); without it, growth happens between
+    # passes as the drone traverses, so it still converges.
     size = get_world_size()
-    for i in range(size):
-        if get_ground_type() == Grounds.Grassland:
-            till()
-        tries = 0
-        while tries < 6:
+    done = False
+    while not done:
+        done = True
+        for i in range(size):
+            if get_ground_type() == Grounds.Grassland:
+                till()
             e = get_entity_type()
             if e == Entities.Pumpkin and can_harvest():
-                break
-            if e == None or e == Entities.Dead_Pumpkin:
-                if not plant(Entities.Pumpkin):
-                    break
-            if num_items(Items.Fertilizer) <= 0:
-                break
-            use_item(Items.Fertilizer)
-            tries = tries + 1
-        move(East)
+                pass
+            else:
+                done = False
+                if e == None or e == Entities.Dead_Pumpkin:
+                    if not plant(Entities.Pumpkin):
+                        return            # out of carrots -> stop this row
+                if num_items(Items.Fertilizer) > 0:
+                    use_item(Items.Fertilizer)
+            move(East)
 
 def pumpkin_mega_once():
     clear()
