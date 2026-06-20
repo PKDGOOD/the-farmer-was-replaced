@@ -200,8 +200,9 @@ def cactus_once():
         harvest()                         # sorted + grown -> full cascade
 
 # ---------- sunflowers -> power (8x max-petal) -> global 2x speed ----------
-POWER_FLOOR = 50
-POWER_TARGET = 800
+POWER_FLOOR = 1500
+POWER_TARGET = 6000
+POWER_ROUNDS = 40
 
 def sun_plant_row():
     size = get_world_size()
@@ -257,7 +258,7 @@ def power_gen():
     clear()
     parallel_rows(sun_plant_row)          # whole field of sunflowers + watered
     r = 0
-    while r < 6:
+    while r < POWER_ROUNDS:
         if num_items(Items.Power) >= POWER_TARGET:
             break
         m = field_max_petals()
