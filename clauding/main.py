@@ -1,49 +1,42 @@
-# clauding playthrough - Stage 8: robust balanced farm (carrot / wood / hay)
-# Fixes:
-#  - Do NOT gate planting on get_entity_type()==None. Tilled/occupied tiles
-#    can make that check skip planting. Just call plant(); it no-ops (1 tick)
-#    if the tile is occupied or the ground is wrong.
-#  - clear() once at start to reset the messy multi-stage field to clean
-#    grass (inventory is kept; only field entities are removed).
-# ASCII-only comments: the in-game editor throws on non-ASCII text.
+# clauding playthrough - Stage 9: mega-pumpkin farm (single drone)
+# ASCII-only comments (in-game editor breaks on non-ASCII).
 #
-# Tiles split by (x+y)%3: k==0 carrot (soil, watered), k==1 wood (tree>bush),
-# k==2 hay (grass). Wood tiles are never orthogonally adjacent on sizes
-# divisible by 3 (e.g. 6x6) -> trees grow with no adjacency penalty.
-# Carrots gated behind a wood reserve so they never drain wood to 0
-# (trees cost wood; draining it would block tree planting).
+# The whole farm is one pumpkin block. When every pumpkin is fully grown they
+# merge into one giant pumpkin; harvesting it yields s^3 (s<=5) or 6*s^2 (s>=6)
+# pumpkins, where s = farm side length. ~1 in 5 pumpkins dies at maturity
+# (Dead_Pumpkin) and must be replanted until the whole block is alive+grown.
+#
+# Notes:
+#  - Pumpkins cost CARROTS to plant. If carrots run out the block can't
+#    complete; switch back to the balanced farm (git: Stage 8) to refill.
+#  - No fertilizer on pumpkins: it infects them and halves the mega yield.
 
-RESERVE = 20
-
-def farm_tile():
-    if can_harvest():
-        harvest()
-    k = (get_pos_x() + get_pos_y()) % 3
-    if k == 1:
-        # wood: try tree (5 each); if it can't (no wood / occupied) plant bush
-        if not plant(Entities.Tree):
-            plant(Entities.Bush)
-    elif k == 0:
-        # carrot: needs soil; only plant when wood is spare
-        if get_ground_type() == Grounds.Grassland:
-            till()
-        if num_items(Items.Wood) > RESERVE:
-            plant(Entities.Carrot)
-        if num_items(Items.Water) > 0 and get_water() < 0.5:
-            use_item(Items.Water)
-    else:
-        # hay: keep grassland so grass regrows on its own
-        if get_ground_type() == Grounds.Soil:
-            till()
+def all_to_soil():
+    size = get_world_size()
+    for x in range(size):
+        for y in range(size):
+            if get_ground_type() == Grounds.Grassland:
+                till()
+            move(North)
+        move(East)
 
 def run():
     clear()
+    all_to_soil()
     size = get_world_size()
     while True:
+        ready = True
         for x in range(size):
             for y in range(size):
-                farm_tile()
+                e = get_entity_type()
+                if e == None or e == Entities.Dead_Pumpkin:
+                    plant(Entities.Pumpkin)   # costs carrots; no-op if none
+                    ready = False
+                elif not can_harvest():
+                    ready = False             # a pumpkin still growing
                 move(North)
             move(East)
+        if ready:
+            harvest()                         # all grown -> merged mega -> collect
 
 run()
