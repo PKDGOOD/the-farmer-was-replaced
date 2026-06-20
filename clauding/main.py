@@ -1,25 +1,39 @@
-# clauding 플레이스루 — Stage 4: 2D 당근 농장 (관수 + Wood 자동 폴백)
+# clauding 플레이스루 — Stage 5: 함수형 균형 농장 (Carrot/Wood/Hay 동시 생산)
 # ------------------------------------------------------------
-# 가용: Senses, For, Operators, Carrots(till), Watering(use_item/get_water), Debug
-# 아직 없음: Variables(맨 대입 회피), Functions, Costs, Auto_Unlock, Trees, Megafarm
-#
-# 전략: 당근(다음 자원 티어)을 2D 전체에서 재배. 관수로 성장 가속(수위<0.5 & 물 보유 시).
-#   당근은 soil 필요 → grassland면 till. 당근 심기는 wood+hay 소모 →
-#   Wood 떨어져 plant(Carrot) 실패하면 덤불(soil에서도 자람)로 폴백해 Wood 자급(자기균형).
-#
-# 매 타일: 수확 → (grassland면 till) → 빈칸이면 당근(실패 시 덤불) → 관수 → move(North).
-# 다음: Functions+Costs+Auto_Unlock 확보 시 자동 언락 엔진(farmlib+reset_main) 배포.
-while True:
-    for col in range(get_world_size()):
-        for row in range(get_world_size()):
-            if can_harvest():
-                harvest()
-            if get_ground_type() == Grounds.Grassland:
-                till()
-            if get_entity_type() == None:
-                if not plant(Entities.Carrot):
-                    plant(Entities.Bush)
-            if num_items(Items.Water) > 0 and get_water() < 0.5:
-                use_item(Items.Water)
-            move(North)
-        move(East)
+# 신규 가용: Variables(맨 대입 OK), Functions(def/return/global).
+# 문제: 당근은 wood+hay를 소모 → 단일작물 농장은 다른 자원이 0이 됨(직전 Stage4가 그랬음).
+# 해결: 절대좌표 (x+y)%3 으로 타일을 3분할해 세 자원을 동시·지속 생산(자기균형).
+#   k==0 당근(soil, 관수)  k==1 덤불(Wood)  k==2 잔디(Hay, 빈 grassland 자동성장)
+# 아직 없음: Costs, Auto_Unlock, Lists/Dicts → 이게 들어오면 자동 언락 엔진으로 전환.
+
+def farm_tile():
+    if can_harvest():
+        harvest()
+    k = (get_pos_x() + get_pos_y()) % 3
+    if k == 0:
+        # 당근: soil 필요 + 관수로 성장 가속
+        if get_ground_type() == Grounds.Grassland:
+            till()
+        if get_entity_type() == None:
+            plant(Entities.Carrot)
+        if num_items(Items.Water) > 0 and get_water() < 0.5:
+            use_item(Items.Water)
+    elif k == 1:
+        # Wood: 덤불(soil/grassland 둘 다 자람)
+        if get_entity_type() == None:
+            plant(Entities.Bush)
+    else:
+        # Hay: grassland으로 되돌리고 비워두면 잔디 자동 성장
+        if get_ground_type() == Grounds.Soil:
+            till()
+
+def run():
+    size = get_world_size()
+    while True:
+        for x in range(size):
+            for y in range(size):
+                farm_tile()
+                move(North)
+            move(East)
+
+run()
