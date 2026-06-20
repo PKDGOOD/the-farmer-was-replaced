@@ -7,8 +7,15 @@ HERE="${0:A:h}"
 SRC="$HERE/clauding"
 DST="/Users/dion/Library/Application Support/com.TheFarmerWasReplaced.TheFarmerWasReplaced/Saves/clauding"
 
+# Only deploy .py code (ASCII-only). Do NOT copy Korean .md docs into the
+# live save: the in-game editor throws IndexOutOfRangeException on non-ASCII.
 cp "$SRC"/*.py "$DST"/
-cp "$HERE/STRATEGY.md" "$DST"/ 2>/dev/null || true
+
+# Guard: refuse to deploy any .py containing non-ASCII (would break the editor).
+if LC_ALL=C grep -lP '[^\x00-\x7F]' "$DST"/*.py 2>/dev/null; then
+    echo "ERROR: non-ASCII found in deployed .py above. The in-game editor will break." >&2
+    exit 1
+fi
 
 echo "Deployed to $DST:"
 ls -1 "$DST"/*.py
