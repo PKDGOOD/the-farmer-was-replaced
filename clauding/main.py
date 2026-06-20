@@ -192,6 +192,72 @@ def cactus_once():
             use_item(Items.Fertilizer)
     harvest()                             # sorted + grown -> full cascade
 
+# ---------- sunflowers -> power (8x max-petal) -> global 2x speed ----------
+POWER_FLOOR = 50
+POWER_TARGET = 800
+
+def sun_plant_row():
+    size = get_world_size()
+    for i in range(size):
+        if get_ground_type() == Grounds.Grassland:
+            till()
+        if get_entity_type() == None and afford_plant(Entities.Sunflower):
+            plant(Entities.Sunflower)
+        if num_items(Items.Water) > 0 and get_water() < 0.8:
+            use_item(Items.Water)
+        move(East)
+
+def row_max_petals():                     # parallel-reduction worker: returns row max
+    size = get_world_size()
+    m = 0
+    for i in range(size):
+        if can_harvest():
+            p = measure()
+            if p != None and p > m:
+                m = p
+        move(East)
+    return m
+
+def field_max_petals():
+    size = get_world_size()
+    drones = []
+    m = 0
+    for i in range(size):
+        d = spawn_drone(row_max_petals)
+        if d:
+            drones.append(d)
+        else:
+            r = row_max_petals()
+            if r > m:
+                m = r
+        move(North)
+    for d in drones:
+        r = wait_for(d)
+        if r > m:
+            m = r
+    return m
+
+def harvest_max_row(m):                   # harvest only grown sunflowers at the field max
+    size = get_world_size()
+    for i in range(size):
+        if can_harvest() and measure() == m:
+            harvest()                     # 8x power (m is max; the rest stay -> >=10)
+            if afford_plant(Entities.Sunflower):
+                plant(Entities.Sunflower)
+        move(East)
+
+def power_gen():
+    clear()
+    parallel_rows(sun_plant_row)          # whole field of sunflowers + watered
+    r = 0
+    while r < 6:
+        if num_items(Items.Power) >= POWER_TARGET:
+            break
+        m = field_max_petals()
+        if m > 0:
+            parallel_rows_arg(harvest_max_row, m)
+        r = r + 1
+
 # ---------- maze -> gold (single drone) ----------
 def maze_substance_need():
     return get_world_size() * 2 ** (num_unlocked(Unlocks.Mazes) - 1)
@@ -335,6 +401,11 @@ def fundable(cost):
 def run():
     while True:
         quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance), "power", num_items(Items.Power))
+        # 0. keep power topped up -> the engine consumes it for a GLOBAL 2x speed
+        #    on every other action. Do this first so everything below runs at 2x.
+        if num_items(Items.Power) < POWER_FLOOR:
+            power_gen()
+            continue
         # 1. buy every currently affordable upgrade/unlock (compounding)
         for t in all_targets():
             c = get_cost(t)
