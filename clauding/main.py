@@ -14,6 +14,7 @@ CARROT_HIGH = 250
 BONE_CACTUS_MIN = 2000
 BONE_APPLES = 80
 AUTO_BONE = False
+WEIRD_MAZE_BUFFER = 12
 
 def water_if_dry():
     if num_items(Items.Water) > 0 and get_water() < 0.5:
@@ -37,6 +38,12 @@ def afford_plant_many(entity, n):
         if num_items(item) < c[item] * n:
             return False
     return True
+
+def weird_abundant():
+    if num_unlocked(Unlocks.Mazes) == 0:
+        return False
+    need = get_world_size() * 2 ** (num_unlocked(Unlocks.Mazes) - 1)
+    return num_items(Items.Weird_Substance) >= need * WEIRD_MAZE_BUFFER
 
 # ---------- parallel helper: one drone per row ----------
 def parallel_rows(row_fn):
@@ -84,13 +91,67 @@ def grass_tile():
     if get_ground_type() == Grounds.Soil:
         till()
 
+def plant_entity_safe(entity):
+    if entity == Entities.Grass:
+        if get_entity_type() == None and get_ground_type() == Grounds.Soil:
+            till()
+        return True
+    if entity == Entities.Carrot:
+        if not afford_plant_many(Entities.Carrot, get_world_size()):
+            return False
+        if get_ground_type() == Grounds.Grassland:
+            till()
+        if get_entity_type() == None:
+            return plant(Entities.Carrot)
+        return False
+    if entity == Entities.Tree:
+        if get_entity_type() == None and afford_plant_many(Entities.Tree, get_world_size()):
+            return plant(Entities.Tree)
+        return False
+    if entity == Entities.Bush:
+        if get_entity_type() == None and afford_plant_many(Entities.Bush, get_world_size()):
+            return plant(Entities.Bush)
+        return False
+    return False
+
+def move_east_n(n):
+    for i in range(n):
+        move(East)
+
+def move_west_n(n):
+    for i in range(n):
+        move(West)
+
+def companion_same_row():
+    comp = get_companion()
+    if comp == None:
+        return
+    entity, pos = comp
+    tx, ty = pos
+    x = get_pos_x()
+    y = get_pos_y()
+    if ty != y:
+        return
+    dx = tx - x
+    if dx > 0 and dx <= 3:
+        move_east_n(dx)
+        plant_entity_safe(entity)
+        move_west_n(dx)
+    elif dx < 0 and dx >= -3:
+        move_west_n(-dx)
+        plant_entity_safe(entity)
+        move_east_n(-dx)
+
 def plant_wood():
     size = get_world_size()
     if (get_pos_x() + get_pos_y()) % 2 == 0 and afford_plant_many(Entities.Tree, size):
         if plant(Entities.Tree):
+            companion_same_row()
             return True
     if afford_plant_many(Entities.Bush, size):
-        return plant(Entities.Bush)
+        if plant(Entities.Bush):
+            companion_same_row()
+            return True
     return False
 
 # ---------- basic farm (targeted hay / wood / carrot) ----------
@@ -112,7 +173,8 @@ def basic_tile(target):
         if get_ground_type() == Grounds.Grassland:
             till()
         if get_entity_type() == None:
-            plant(Entities.Carrot)
+            if plant(Entities.Carrot):
+                companion_same_row()
         water_if_dry()
 
 def basic_row(target):
@@ -194,7 +256,7 @@ def pumpkin_row():
                         return
                     if not plant(Entities.Pumpkin):
                         return            # out of carrots -> stop this row
-                if num_items(Items.Fertilizer) > 0:
+                if num_items(Items.Fertilizer) > 0 and not weird_abundant():
                     use_item(Items.Fertilizer)
             move(East)
 
@@ -276,10 +338,10 @@ def cactus_once():
         harvest()                         # sorted + grown -> full cascade
 
 # ---------- sunflowers -> power (8x max-petal) -> global 2x speed ----------
-POWER_FLOOR = 400
-POWER_TARGET = 1200
-POWER_ROUNDS = 8
-POWER_MIN_ROUND_GAIN = 80
+POWER_FLOOR = 250
+POWER_TARGET = 700
+POWER_ROUNDS = 4
+POWER_MIN_ROUND_GAIN = 40
 
 def sun_plant_row():
     size = get_world_size()
@@ -519,22 +581,33 @@ def searcher(start_dir, use_right_hand):
 def maze_run():
     if not make_maze():
         return
-    # Split the loop-free maze tree by the first open branch from the entrance.
-    # Extra wall-followers only duplicate work and cost 200 ticks per spawned drone.
+    # Split only when the entrance has real branches. If there is just one way
+    # in, spawning a helper only adds 200 ticks and leaves the caller waiting.
     drones = []
     gold_before = num_items(Items.Gold)
     dirs = [North, East, South, West]
+    branches = []
     for di in range(4):
+        if can_move(dirs[di]):
+            branches.append(di)
+    if len(branches) == 0:
+        guided_searcher(-1, 0)
+        return
+    if len(branches) == 1:
+        guided_searcher(branches[0], branches[0])
+        return
+    last = len(branches) - 1
+    for i in range(last):
         if num_items(Items.Gold) > gold_before:
             break
-        if can_move(dirs[di]):
-            g = spawn_drone(guided_searcher, di, di)
-            if g:
-                drones.append(g)
-            elif num_items(Items.Gold) == gold_before:
-                guided_searcher(di, di)
-    if len(drones) == 0 and num_items(Items.Gold) == gold_before:
-        guided_searcher(-1, 0)
+        di = branches[i]
+        g = spawn_drone(guided_searcher, di, di)
+        if g:
+            drones.append(g)
+        else:
+            guided_searcher(di, di)
+    if num_items(Items.Gold) == gold_before:
+        guided_searcher(branches[last], branches[last])
     for d in drones:
         wait_for(d)
 
