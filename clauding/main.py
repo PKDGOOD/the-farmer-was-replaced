@@ -346,7 +346,7 @@ def choose_maze_dir(tx, ty, seen, prefer_dir):
                     best_b = db
     return best
 
-def guided_searcher(prefer_dir):
+def guided_searcher(first_dir, prefer_dir):
     target = measure()
     if target == None:
         return False
@@ -357,10 +357,24 @@ def guided_searcher(prefer_dir):
     stack = []
     steps = 0
     limit = get_world_size() * get_world_size() * 8
+    start_key = maze_key(get_pos_x(), get_pos_y())
+    if get_entity_type() == Entities.Treasure:
+        harvest()
+        return True
+    if first_dir != -1:
+        if can_move(dirs[first_dir]):
+            seen.append(start_key)
+            stack.append(first_dir)
+            move(dirs[first_dir])
+            steps = steps + 1
+        else:
+            return False
     while get_entity_type() != Entities.Treasure and steps < limit:
         if num_items(Items.Gold) > gold_before:
             return True
         key = maze_key(get_pos_x(), get_pos_y())
+        if first_dir != -1 and key == start_key and len(stack) == 0:
+            return False
         if not seen_key(seen, key):
             seen.append(key)
         d = choose_maze_dir(tx, ty, seen, prefer_dir)
@@ -423,20 +437,22 @@ def searcher(start_dir, use_right_hand):
 def maze_run():
     if not make_maze():
         return
-    # Race guided measure-searchers and wall-followers. Different guide drones
-    # break distance ties in different directions, so they fan out at branches.
+    # Split the loop-free maze tree by the first open branch from the entrance.
+    # Extra wall-followers only duplicate work and cost 200 ticks per spawned drone.
     drones = []
+    gold_before = num_items(Items.Gold)
+    dirs = [North, East, South, West]
     for di in range(4):
-        g = spawn_drone(guided_searcher, di)
-        if g:
-            drones.append(g)
-        a = spawn_drone(searcher, di, True)
-        if a:
-            drones.append(a)
-        b = spawn_drone(searcher, di, False)
-        if b:
-            drones.append(b)
-    guided_searcher(0)              # main searches too
+        if num_items(Items.Gold) > gold_before:
+            break
+        if can_move(dirs[di]):
+            g = spawn_drone(guided_searcher, di, di)
+            if g:
+                drones.append(g)
+            elif num_items(Items.Gold) == gold_before:
+                guided_searcher(di, di)
+    if len(drones) == 0 and num_items(Items.Gold) == gold_before:
+        guided_searcher(-1, 0)
     for d in drones:
         wait_for(d)
 
