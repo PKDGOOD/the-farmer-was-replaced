@@ -266,80 +266,52 @@ def worst_item(cost):
             worst = item
     return worst
 
-# buy compounding upgrades, but NEVER spend gold/weird on them (those are the
-# scarce unlock fuel) -- only crop-funded upgrades from surplus.
-def upgrade_uses_scarce(cost):
+# Everything worth buying: repeatable UPGRADES (compound forever) + remaining
+# feature unlocks. get_cost() returns the NEXT level's cost for upgrades, or
+# None when maxed/owned -- so this list keeps pumping upgrade levels indefinitely.
+def all_targets():
+    return [Unlocks.Speed, Unlocks.Megafarm, Unlocks.Expand, Unlocks.Watering,
+            Unlocks.Fertilizer, Unlocks.Carrots, Unlocks.Trees, Unlocks.Grass,
+            Unlocks.Cactus, Unlocks.Pumpkins, Unlocks.Sunflowers, Unlocks.Polyculture,
+            Unlocks.Mazes, Unlocks.Dinosaurs, Unlocks.Simulation, Unlocks.Leaderboard]
+
+# distance to affordable = largest single-item shortfall (0 if affordable)
+def deficit(cost):
+    d = 0
     for item in cost:
-        if item == Items.Gold or item == Items.Weird_Substance:
-            return True
-    return False
+        short = cost[item] - num_items(item)
+        if short > d:
+            d = short
+    return d
 
-def buy_upgrades():
-    ups = [Unlocks.Megafarm, Unlocks.Speed]
-    for u in ups:
-        cost = get_cost(u)
-        if cost != None and affordable(cost) and not upgrade_uses_scarce(cost):
-            unlock(u)
-
-def target_list():
-    return [Unlocks.Dinosaurs, Unlocks.Leaderboard]
-
-# real-time stock reserves: keep each resource at/above these. Each cycle the
-# engine tops up whatever is MOST depleted first (scarcest-first), so it mixes
-# crops dynamically based on live inventory instead of tunneling on one.
-def reserve_for(item):
-    if item == Items.Gold:
-        return 3000
-    if item == Items.Weird_Substance:
-        return 1500
-    if item == Items.Pumpkin:
-        return 1500
-    if item == Items.Carrot:
-        return 1500
-    if item == Items.Cactus:
-        return 500
-    if item == Items.Wood:
-        return 400
-    return 0
-
-# explicit priority order (not a ratio): produce the FIRST resource below its
-# reserve. Gold/Weird come first so the gold pipeline never starves; cactus is
-# low priority so it can't crowd out gold (it sits at 0 with ratio 0 otherwise).
-def scarcest():
-    order = [Items.Gold, Items.Weird_Substance, Items.Pumpkin, Items.Carrot, Items.Cactus, Items.Wood]
-    for it in order:
-        if num_items(it) < reserve_for(it):
-            return it
-    return None
-
+# NO reserve caps. Buy everything affordable, then accumulate without limit
+# toward the NEAREST unaffordable upgrade/unlock. Basic crops are already
+# abundant so they are never the bottleneck -> the bot keeps stacking the
+# valuable resources (gold/cactus/pumpkin/...) the next upgrade actually needs.
 def run():
-    blocked = set()
     while True:
-        # tick-efficiency log (free: get_tick_count/quick_print are 0 ticks) ->
-        # read it on the Output page / output.txt to watch ticks vs stocks.
-        quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance))
-        buy_upgrades()
-        target = None
-        for t in target_list():
-            if num_unlocked(t) == 0 and get_cost(t) != None and not (t in blocked):
-                target = t
-                break
-        # unlock the moment it is affordable
-        if target != None and affordable(get_cost(target)):
-            if not unlock(target):
-                blocked.add(target)
-            continue
-        # DYNAMIC: top up the most-depleted resource first (live stock check)
-        item = scarcest()
-        if item != None:
-            produce(item)
-            continue
-        # reserves all met -> fund the next unlock's bottleneck, or idle-farm
-        if target != None:
-            if not produce(worst_item(get_cost(target))):
-                blocked.add(target)
+        quick_print(get_tick_count(), "gold", num_items(Items.Gold), "cact", num_items(Items.Cactus), "pump", num_items(Items.Pumpkin), "weird", num_items(Items.Weird_Substance), "power", num_items(Items.Power))
+        # 1. buy every currently affordable upgrade/unlock (compounding)
+        for t in all_targets():
+            c = get_cost(t)
+            if c != None and affordable(c):
+                unlock(t)
+        # 2. farm toward the closest-to-affordable target (unbounded accumulation)
+        best = None
+        best_d = 0
+        for t in all_targets():
+            c = get_cost(t)
+            if c != None and not affordable(c):
+                dd = deficit(c)
+                if best == None or dd < best_d:
+                    best = t
+                    best_d = dd
+        if best != None:
+            if not produce(worst_item(get_cost(best))):
+                produce(Items.Gold)        # bottleneck unfarmable -> stack gold
         else:
-            balanced_sweep()
-            blocked = set()
+            produce(Items.Gold)            # all affordable bought -> stack gold
+
+run()
 
 run()
