@@ -45,65 +45,150 @@ def weird_abundant():
     need = get_world_size() * 2 ** (num_unlocked(Unlocks.Mazes) - 1)
     return num_items(Items.Weird_Substance) >= need * WEIRD_MAZE_BUFFER
 
-# ---------- parallel helper: one drone per row ----------
+# ---------- parallel helper: split rows/cols across available drones ----------
 def return_to_x(start_x):
     size = get_world_size()
-    steps = 0
-    while get_pos_x() != start_x and steps < size:
-        move(West)
-        steps = steps + 1
+    east = (start_x - get_pos_x() + size) % size
+    west = (get_pos_x() - start_x + size) % size
+    if east < west:
+        for i in range(east):
+            move(East)
+    else:
+        for i in range(west):
+            move(West)
 
 def return_to_y(start_y):
     size = get_world_size()
-    steps = 0
-    while get_pos_y() != start_y and steps < size:
-        move(South)
-        steps = steps + 1
+    north = (start_y - get_pos_y() + size) % size
+    south = (get_pos_y() - start_y + size) % size
+    if north < south:
+        for i in range(north):
+            move(North)
+    else:
+        for i in range(south):
+            move(South)
+
+def move_north_n(n):
+    for i in range(n):
+        move(North)
+
+def move_east_n(n):
+    for i in range(n):
+        move(East)
+
+def row_worker(row_fn, start, stride):
+    size = get_world_size()
+    start_x = get_pos_x()
+    row = start
+    while row < size:
+        row_fn()
+        row = row + stride
+        if row < size:
+            return_to_x(start_x)
+            move_north_n(stride)
+
+def row_worker_arg(row_fn, arg, start, stride):
+    size = get_world_size()
+    start_x = get_pos_x()
+    row = start
+    while row < size:
+        row_fn(arg)
+        row = row + stride
+        if row < size:
+            return_to_x(start_x)
+            move_north_n(stride)
+
+def col_worker(col_fn, start, stride):
+    size = get_world_size()
+    start_y = get_pos_y()
+    col = start
+    while col < size:
+        col_fn()
+        col = col + stride
+        if col < size:
+            return_to_y(start_y)
+            move_east_n(stride)
 
 def parallel_rows(row_fn):
     size = get_world_size()
+    workers = max_drones()
+    if workers < 1:
+        workers = 1
+    if workers > size:
+        workers = size
     drones = []
-    for i in range(size):
-        d = spawn_drone(row_fn)
+    origin_x = get_pos_x()
+    origin_y = get_pos_y()
+    for i in range(workers - 1):
+        d = spawn_drone(row_worker, row_fn, i, workers)
         if d:
             drones.append(d)
         else:
             start_x = get_pos_x()
-            row_fn()                 # no drone free -> do this row myself
+            start_y = get_pos_y()
+            row_worker(row_fn, i, workers)
             return_to_x(start_x)
+            return_to_y(start_y)
         move(North)
+    row_worker(row_fn, workers - 1, workers)
+    return_to_x(origin_x)
+    return_to_y(origin_y)
     for d in drones:
         wait_for(d)
 
 # one drone per column (spawn along the bottom row, moving East)
 def parallel_cols(col_fn):
     size = get_world_size()
+    workers = max_drones()
+    if workers < 1:
+        workers = 1
+    if workers > size:
+        workers = size
     drones = []
-    for i in range(size):
-        d = spawn_drone(col_fn)
+    origin_x = get_pos_x()
+    origin_y = get_pos_y()
+    for i in range(workers - 1):
+        d = spawn_drone(col_worker, col_fn, i, workers)
         if d:
             drones.append(d)
         else:
+            start_x = get_pos_x()
             start_y = get_pos_y()
-            col_fn()
+            col_worker(col_fn, i, workers)
+            return_to_x(start_x)
             return_to_y(start_y)
         move(East)
+    col_worker(col_fn, workers - 1, workers)
+    return_to_x(origin_x)
+    return_to_y(origin_y)
     for d in drones:
         wait_for(d)
 
 # one drone per row, forwarding a single arg to each (snapshotted, no closure)
 def parallel_rows_arg(row_fn, arg):
     size = get_world_size()
+    workers = max_drones()
+    if workers < 1:
+        workers = 1
+    if workers > size:
+        workers = size
     drones = []
-    for i in range(size):
-        d = spawn_drone(row_fn, arg)
+    origin_x = get_pos_x()
+    origin_y = get_pos_y()
+    for i in range(workers - 1):
+        d = spawn_drone(row_worker_arg, row_fn, arg, i, workers)
         if d:
             drones.append(d)
         else:
             start_x = get_pos_x()
-            row_fn(arg)
+            start_y = get_pos_y()
+            row_worker_arg(row_fn, arg, i, workers)
             return_to_x(start_x)
+            return_to_y(start_y)
         move(North)
+    row_worker_arg(row_fn, arg, workers - 1, workers)
+    return_to_x(origin_x)
+    return_to_y(origin_y)
     for d in drones:
         wait_for(d)
 
@@ -335,35 +420,63 @@ def cactus_plant_row():
 
 def sort_row():
     size = get_world_size()
-    for p in range(size - 1):
+    start_x = get_pos_x()
+    left = 0
+    right = size - 1
+    while left < right:
         swapped = False
-        for i in range(size - 1):
+        for i in range(right - left):
             a = measure()
             b = measure(East)
             if a != None and b != None and a > b:   # guard: skip non-cactus
                 swap(East)
                 swapped = True
             move(East)
-        for i in range(size - 1):
+
+        right = right - 1
+        for i in range(right - left + 1):
+            a = measure(West)
+            b = measure()
+            if a != None and b != None and a > b:
+                swap(West)
+                swapped = True
             move(West)
-        if not swapped:
+
+        left = left + 1
+        if not swapped or left >= right:
             break
+        move(East)
+    return_to_x(start_x)
 
 def sort_col():
     size = get_world_size()
-    for p in range(size - 1):
+    start_y = get_pos_y()
+    bottom = 0
+    top = size - 1
+    while bottom < top:
         swapped = False
-        for i in range(size - 1):
+        for i in range(top - bottom):
             a = measure()
             b = measure(North)
             if a != None and b != None and a > b:
                 swap(North)
                 swapped = True
             move(North)
-        for i in range(size - 1):
+
+        top = top - 1
+        for i in range(top - bottom + 1):
+            a = measure(South)
+            b = measure()
+            if a != None and b != None and a > b:
+                swap(South)
+                swapped = True
             move(South)
-        if not swapped:
+
+        bottom = bottom + 1
+        if not swapped or bottom >= top:
             break
+        move(North)
+    return_to_y(start_y)
 
 def cactus_once():
     clear()
