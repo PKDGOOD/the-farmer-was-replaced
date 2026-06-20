@@ -29,6 +29,15 @@ def afford_plant(entity):
             return False
     return True
 
+def afford_plant_many(entity, n):
+    c = get_cost(entity)
+    if c == None:
+        return True
+    for item in c:
+        if num_items(item) < c[item] * n:
+            return False
+    return True
+
 # ---------- parallel helper: one drone per row ----------
 def parallel_rows(row_fn):
     size = get_world_size()
@@ -71,33 +80,49 @@ def parallel_rows_arg(row_fn, arg):
     for d in drones:
         wait_for(d)
 
-# ---------- balanced farm (carrot / wood / hay) ----------
-def balanced_tile():
+def grass_tile():
+    if get_ground_type() == Grounds.Soil:
+        till()
+
+def plant_wood():
+    size = get_world_size()
+    if (get_pos_x() + get_pos_y()) % 2 == 0 and afford_plant_many(Entities.Tree, size):
+        if plant(Entities.Tree):
+            return True
+    if afford_plant_many(Entities.Bush, size):
+        return plant(Entities.Bush)
+    return False
+
+# ---------- basic farm (targeted hay / wood / carrot) ----------
+def basic_tile(target):
     if can_harvest():
         harvest()
-    k = (get_pos_x() + get_pos_y()) % 3
-    if k == 1:
-        if not plant(Entities.Tree):
-            plant(Entities.Bush)
-        water_if_dry()
-    elif k == 0:
+    if target == Items.Hay:
+        grass_tile()
+        return
+    if target == Items.Wood:
+        if get_entity_type() == None:
+            plant_wood()
+            water_if_dry()
+        return
+    if target == Items.Carrot:
+        if not afford_plant_many(Entities.Carrot, get_world_size()):
+            grass_tile()
+            return
         if get_ground_type() == Grounds.Grassland:
             till()
-        if num_items(Items.Wood) > WOOD_MIN:
+        if get_entity_type() == None:
             plant(Entities.Carrot)
         water_if_dry()
-    else:
-        if get_ground_type() == Grounds.Soil:
-            till()
 
-def balanced_row():
+def basic_row(target):
     size = get_world_size()
     for i in range(size):
-        balanced_tile()
+        basic_tile(target)
         move(East)
 
-def balanced_sweep():
-    parallel_rows(balanced_row)
+def basic_sweep(target):
+    parallel_rows_arg(basic_row, target)
 
 # ---------- dinosaur -> bone ----------
 def dino_step_toward(tx, ty):
@@ -165,6 +190,8 @@ def pumpkin_row():
             else:
                 done = False
                 if e == None or e == Entities.Dead_Pumpkin:
+                    if not afford_plant_many(Entities.Pumpkin, size):
+                        return
                     if not plant(Entities.Pumpkin):
                         return            # out of carrots -> stop this row
                 if num_items(Items.Fertilizer) > 0:
@@ -180,7 +207,7 @@ def pumpkin_batch():
     if num_items(Items.Carrot) < CARROT_HIGH:
         tries = 0
         while num_items(Items.Carrot) < CARROT_HIGH and tries < 40:
-            balanced_sweep()
+            basic_sweep(Items.Carrot)
             tries = tries + 1
     pumpkin_mega_once()
 
@@ -195,7 +222,7 @@ def cactus_plant_row():
             harvest()                    # clear grown grass so the tile is empty
         if get_ground_type() == Grounds.Grassland:
             till()                        # soil -> grass cannot regrow here
-        if get_entity_type() == None and afford_plant(Entities.Cactus):
+        if get_entity_type() == None and afford_plant_many(Entities.Cactus, size):
             plant(Entities.Cactus)        # only plant when we can pay the cost
         if num_items(Items.Water) > 0 and get_water() < 0.8:
             use_item(Items.Water)
@@ -259,7 +286,7 @@ def sun_plant_row():
     for i in range(size):
         if get_ground_type() == Grounds.Grassland:
             till()
-        if get_entity_type() == None and afford_plant(Entities.Sunflower):
+        if get_entity_type() == None and afford_plant_many(Entities.Sunflower, size):
             plant(Entities.Sunflower)
         if num_items(Items.Water) > 0 and get_water() < 0.8:
             use_item(Items.Water)
@@ -300,7 +327,7 @@ def harvest_max_row(m):                   # harvest only grown sunflowers at the
     for i in range(size):
         if can_harvest() and measure() == m:
             harvest()                     # 8x power (m is max; the rest stay -> >=10)
-            if afford_plant(Entities.Sunflower):
+            if afford_plant_many(Entities.Sunflower, size):
                 plant(Entities.Sunflower)
         move(East)
 
@@ -529,7 +556,7 @@ def produce(item):
         cactus_once()
         return True
     if item == Items.Hay or item == Items.Wood or item == Items.Carrot:
-        balanced_sweep()
+        basic_sweep(item)
         return True
     return False
 
