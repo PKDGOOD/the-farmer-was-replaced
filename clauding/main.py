@@ -103,7 +103,9 @@ def pumpkin_row():
     # passes as the drone traverses, so it still converges.
     size = get_world_size()
     done = False
-    while not done:
+    passes = 0
+    while not done and passes < 40:
+        passes = passes + 1
         done = True
         for i in range(size):
             if get_ground_type() == Grounds.Grassland:
@@ -187,10 +189,15 @@ def cactus_once():
     parallel_rows(cactus_plant_row)
     parallel_rows(sort_row)
     parallel_cols(sort_col)
-    while not can_harvest():              # ensure (0,0) grown before harvest
+    if get_entity_type() == None:         # (0,0) empty (couldn't afford) -> no hang
+        return
+    tries = 0
+    while not can_harvest() and tries < 3000:   # bounded grow-wait
         if num_items(Items.Fertilizer) > 0:
             use_item(Items.Fertilizer)
-    harvest()                             # sorted + grown -> full cascade
+        tries = tries + 1
+    if can_harvest():
+        harvest()                         # sorted + grown -> full cascade
 
 # ---------- sunflowers -> power (8x max-petal) -> global 2x speed ----------
 POWER_FLOOR = 50
@@ -263,15 +270,18 @@ def maze_substance_need():
     return get_world_size() * 2 ** (num_unlocked(Unlocks.Mazes) - 1)
 
 def make_maze():
-    if num_items(Items.Weird_Substance) < maze_substance_need():
+    need = maze_substance_need()
+    if num_items(Items.Weird_Substance) < need:
         return False
     clear()
-    plant(Entities.Bush)
-    while not can_harvest():
-        if num_items(Items.Fertilizer) > 0:
-            use_item(Items.Fertilizer)
-    use_item(Items.Weird_Substance, maze_substance_need())
-    return True
+    if not plant(Entities.Bush):
+        return False
+    if num_items(Items.Fertilizer) >= 3:
+        use_item(Items.Fertilizer, 3)     # batch-mature the bush (4s grow)
+    tries = 0
+    while not can_harvest() and tries < 3000:
+        tries = tries + 1
+    return use_item(Items.Weird_Substance, need)   # True iff the maze was created
 
 # one wall-following searcher; args passed via spawn_drone (no closures).
 # Stops early if another drone already grabbed the treasure (gold went up).
@@ -279,9 +289,14 @@ def searcher(start_dir, use_right_hand):
     dirs = [North, East, South, West]
     facing = start_dir
     gold_before = num_items(Items.Gold)
+    steps = 0
+    limit = get_world_size() * get_world_size() * 8
     while get_entity_type() != Entities.Treasure:
         if num_items(Items.Gold) > gold_before:
             return
+        if steps > limit:                 # give up -> never hang the wait_for join
+            return
+        steps = steps + 1
         right = (facing + 1) % 4
         left = (facing + 3) % 4
         if use_right_hand:
