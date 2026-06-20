@@ -319,12 +319,19 @@ def wrap_dist(a, b):
 def maze_dist(x, y, tx, ty):
     return wrap_dist(x, tx) + wrap_dist(y, ty)
 
-def choose_maze_dir(tx, ty, seen):
+def dir_bias(d, prefer_dir):
+    b = abs(d - prefer_dir)
+    if b > 2:
+        return 4 - b
+    return b
+
+def choose_maze_dir(tx, ty, seen, prefer_dir):
     dirs = [North, East, South, West]
     x = get_pos_x()
     y = get_pos_y()
     best = -1
     best_d = 1000000
+    best_b = 1000000
     for d in range(4):
         if can_move(dirs[d]):
             nx = step_x(x, d)
@@ -332,26 +339,31 @@ def choose_maze_dir(tx, ty, seen):
             key = maze_key(nx, ny)
             if not seen_key(seen, key):
                 md = maze_dist(nx, ny, tx, ty)
-                if best == -1 or md < best_d:
+                db = dir_bias(d, prefer_dir)
+                if best == -1 or md < best_d or (md == best_d and db < best_b):
                     best = d
                     best_d = md
+                    best_b = db
     return best
 
-def guided_searcher():
+def guided_searcher(prefer_dir):
     target = measure()
     if target == None:
         return False
     tx, ty = target
     dirs = [North, East, South, West]
+    gold_before = num_items(Items.Gold)
     seen = []
     stack = []
     steps = 0
     limit = get_world_size() * get_world_size() * 8
     while get_entity_type() != Entities.Treasure and steps < limit:
+        if num_items(Items.Gold) > gold_before:
+            return True
         key = maze_key(get_pos_x(), get_pos_y())
         if not seen_key(seen, key):
             seen.append(key)
-        d = choose_maze_dir(tx, ty, seen)
+        d = choose_maze_dir(tx, ty, seen, prefer_dir)
         if d != -1:
             stack.append(d)
             move(dirs[d])
@@ -364,6 +376,8 @@ def guided_searcher():
         else:
             return False
         steps = steps + 1
+    if num_items(Items.Gold) > gold_before:
+        return True
     if get_entity_type() == Entities.Treasure:
         harvest()
         return True
@@ -409,18 +423,20 @@ def searcher(start_dir, use_right_hand):
 def maze_run():
     if not make_maze():
         return
-    if guided_searcher():
-        return
-    # 4 directions x 2 hand-rules race to the treasure from the entrance
+    # Race guided measure-searchers and wall-followers. Different guide drones
+    # break distance ties in different directions, so they fan out at branches.
     drones = []
     for di in range(4):
+        g = spawn_drone(guided_searcher, di)
+        if g:
+            drones.append(g)
         a = spawn_drone(searcher, di, True)
         if a:
             drones.append(a)
         b = spawn_drone(searcher, di, False)
         if b:
             drones.append(b)
-    searcher(0, False)              # main searches too
+    guided_searcher(0)              # main searches too
     for d in drones:
         wait_for(d)
 
