@@ -16,6 +16,16 @@ def water_if_dry():
     if num_items(Items.Water) > 0 and get_water() < 0.5:
         use_item(Items.Water)
 
+# True if we can pay the planting cost of entity (avoids failed-plant warnings)
+def afford_plant(entity):
+    c = get_cost(entity)
+    if c == None:
+        return True
+    for item in c:
+        if num_items(item) < c[item]:
+            return False
+    return True
+
 # ---------- parallel helper: one drone per row ----------
 def parallel_rows(row_fn):
     size = get_world_size()
@@ -41,6 +51,20 @@ def parallel_cols(col_fn):
         else:
             col_fn()
         move(East)
+    for d in drones:
+        wait_for(d)
+
+# one drone per row, forwarding a single arg to each (snapshotted, no closure)
+def parallel_rows_arg(row_fn, arg):
+    size = get_world_size()
+    drones = []
+    for i in range(size):
+        d = spawn_drone(row_fn, arg)
+        if d:
+            drones.append(d)
+        else:
+            row_fn(arg)
+        move(North)
     for d in drones:
         wait_for(d)
 
@@ -120,8 +144,8 @@ def cactus_plant_row():
             harvest()                    # clear grown grass so the tile is empty
         if get_ground_type() == Grounds.Grassland:
             till()                        # soil -> grass cannot regrow here
-        if get_entity_type() == None:
-            plant(Entities.Cactus)        # every tile must end up a cactus
+        if get_entity_type() == None and afford_plant(Entities.Cactus):
+            plant(Entities.Cactus)        # only plant when we can pay the cost
         if num_items(Items.Water) > 0 and get_water() < 0.8:
             use_item(Items.Water)
         move(East)
@@ -291,7 +315,7 @@ def can_produce(item):
     if item == Items.Weird_Substance or item == Items.Pumpkin:
         return True
     if item == Items.Cactus:
-        return True
+        return afford_plant(Entities.Cactus)   # only if we can pay to plant it
     if item == Items.Hay or item == Items.Wood or item == Items.Carrot:
         return True
     return False
