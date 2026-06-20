@@ -110,29 +110,53 @@ def make_maze():
     use_item(Items.Weird_Substance, maze_substance_need())
     return True
 
-def solve_maze():
+# one wall-following searcher; args passed via spawn_drone (no closures).
+# Stops early if another drone already grabbed the treasure (gold went up).
+def searcher(start_dir, use_right_hand):
     dirs = [North, East, South, West]
-    facing = 0
+    facing = start_dir
+    gold_before = num_items(Items.Gold)
     while get_entity_type() != Entities.Treasure:
+        if num_items(Items.Gold) > gold_before:
+            return
         right = (facing + 1) % 4
-        if can_move(dirs[right]):
-            facing = right
-            move(dirs[facing])
-        elif can_move(dirs[facing]):
-            move(dirs[facing])
-        else:
-            left = (facing + 3) % 4
-            if can_move(dirs[left]):
+        left = (facing + 3) % 4
+        if use_right_hand:
+            if can_move(dirs[right]):
+                facing = right
+            elif can_move(dirs[facing]):
+                pass
+            elif can_move(dirs[left]):
                 facing = left
-                move(dirs[facing])
             else:
                 facing = (facing + 2) % 4
-                move(dirs[facing])
+        else:
+            if can_move(dirs[left]):
+                facing = left
+            elif can_move(dirs[facing]):
+                pass
+            elif can_move(dirs[right]):
+                facing = right
+            else:
+                facing = (facing + 2) % 4
+        move(dirs[facing])
     harvest()
 
 def maze_run():
-    if make_maze():
-        solve_maze()
+    if not make_maze():
+        return
+    # 4 directions x 2 hand-rules race to the treasure from the entrance
+    drones = []
+    for di in range(4):
+        a = spawn_drone(searcher, di, True)
+        if a:
+            drones.append(a)
+        b = spawn_drone(searcher, di, False)
+        if b:
+            drones.append(b)
+    searcher(0, False)              # main searches too
+    for d in drones:
+        wait_for(d)
 
 # ---------- producer: scarcest-first ----------
 def produce(item):
