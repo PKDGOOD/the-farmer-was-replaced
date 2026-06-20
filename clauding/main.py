@@ -1,14 +1,15 @@
-# clauding playthrough - Stage 13: AUTO-UNLOCK ENGINE
+# clauding playthrough - Stage 15: min-tick engine v2 (rush Megafarm via gold)
 # ASCII-only comments (in-game editor breaks on non-ASCII).
 #
-# Costs (get_cost) and Auto_Unlock (unlock) are now available, so the bot drives
-# its own progression: pick the next target unlock from a priority list, read
-# its cost, farm whichever resource is the bottleneck, and unlock() when it can
-# afford it. Targets it can't fund yet (e.g. needs gold before mazes work) are
-# parked in 'blocked' and retried later.
+# Strategy from first principles: a single drone is capped by serial 200-tick
+# moves. The only way past that is Megafarm (parallel drones). Megafarm needs
+# GOLD, which comes from mazes (now unlocked). Mazes are fueled by
+# Weird_Substance, which fertilized pumpkins produce. So the whole chain is:
+#   fertilized pumpkin -> weird_substance -> maze -> gold -> Megafarm.
 #
-# Farmable resources: hay / wood / carrot (balanced %3 farm) and pumpkin (mega).
-# Gold/power/weird routines come in a later stage (after Mazes/Sunflowers wiring).
+# Priority = scarcest-resource-first: for the current target unlock, read
+# get_cost() and produce the item with the largest deficit (worst_item), each
+# resource via its own routine. Don't over-produce; let the cost drive it.
 
 WOOD_MIN = 20
 CARROT_HIGH = 250
@@ -17,7 +18,7 @@ def water_if_dry():
     if num_items(Items.Water) > 0 and get_water() < 0.5:
         use_item(Items.Water)
 
-# --- balanced %3 farm: one pass making carrot / wood / hay ---
+# ---------- crop routines ----------
 def balanced_sweep():
     size = get_world_size()
     for x in range(size):
@@ -41,26 +42,22 @@ def balanced_sweep():
             move(North)
         move(East)
 
-# --- one whole-farm mega-pumpkin cycle, fertilizer-assisted ---
-# Fertilizer matures each pumpkin in place: it resolves the 20% death roll on
-# the spot (so no extra scan passes) AND infects the pumpkin, turning half the
-# mega yield into Items.Weird_Substance -- our maze fuel (intentional).
 def pumpkin_mega_once():
+    # fertilize each pumpkin in place: resolves the 20% death roll without extra
+    # scan passes AND infects them -> half the yield is Weird_Substance (fuel).
     size = get_world_size()
     while True:
         ready = True
         for x in range(size):
             for y in range(size):
                 if can_harvest() and get_entity_type() == Entities.Pumpkin:
-                    pass                                  # grown pumpkin: done
+                    pass
                 else:
                     ready = False
                     if can_harvest():
                         harvest()
                     if get_ground_type() == Grounds.Grassland:
                         till()
-                    # plant + fertilize to a grown survivor in place (bounded;
-                    # falls back to natural growth if fertilizer runs out)
                     tries = 0
                     while tries < 6:
                         e = get_entity_type()
@@ -68,7 +65,7 @@ def pumpkin_mega_once():
                             break
                         if e == None or e == Entities.Dead_Pumpkin:
                             if not plant(Entities.Pumpkin):
-                                return                    # out of carrots
+                                return
                         if num_items(Items.Fertilizer) <= 0:
                             break
                         use_item(Items.Fertilizer)
@@ -89,15 +86,62 @@ def pumpkin_batch():
     clear()
     pumpkin_mega_once()
 
-# returns True if it knows how to produce this item, else False
-def farm_item(item):
-    if item == Items.Pumpkin or item == Items.Weird_Substance:
-        pumpkin_batch()       # fertilized pumpkins yield pumpkin + weird_substance
+# ---------- maze -> gold ----------
+def maze_substance_need():
+    return get_world_size() * 2 ** (num_unlocked(Unlocks.Mazes) - 1)
+
+def make_maze():
+    if num_items(Items.Weird_Substance) < maze_substance_need():
+        return False
+    clear()                              # drone -> (0,0), field emptied
+    plant(Entities.Bush)
+    while not can_harvest():             # grow the bush (fertilize to speed)
+        if num_items(Items.Fertilizer) > 0:
+            use_item(Items.Fertilizer)
+    use_item(Items.Weird_Substance, maze_substance_need())   # bush -> maze
+    return True
+
+def solve_maze():
+    # right-hand wall follow until standing on the treasure, then harvest.
+    # Mazes are simply-connected (no loops) so this always reaches it.
+    dirs = [North, East, South, West]
+    facing = 0
+    while get_entity_type() != Entities.Treasure:
+        right = (facing + 1) % 4
+        if can_move(dirs[right]):
+            facing = right
+            move(dirs[facing])
+        elif can_move(dirs[facing]):
+            move(dirs[facing])
+        else:
+            left = (facing + 3) % 4
+            if can_move(dirs[left]):
+                facing = left
+                move(dirs[facing])
+            else:
+                facing = (facing + 2) % 4
+                move(dirs[facing])
+    harvest()                            # on treasure -> gold = maze area
+
+def maze_run():
+    if make_maze():
+        solve_maze()
+
+# ---------- producer: scarcest-first ----------
+def produce(item):
+    if item == Items.Gold:
+        if num_items(Items.Weird_Substance) < maze_substance_need():
+            pumpkin_batch()              # build fuel first (fertilized pumpkins)
+        else:
+            maze_run()
+        return True
+    if item == Items.Weird_Substance or item == Items.Pumpkin:
+        pumpkin_batch()
         return True
     if item == Items.Hay or item == Items.Wood or item == Items.Carrot:
         balanced_sweep()
         return True
-    return False
+    return False                         # unknown item -> caller parks target
 
 def affordable(cost):
     for item in cost:
@@ -117,12 +161,9 @@ def worst_item(cost):
 
 def target_list():
     return [
-        Unlocks.Mazes,
-        Unlocks.Polyculture,
-        Unlocks.Cactus,
-        Unlocks.Dinosaurs,
+        Unlocks.Megafarm,     # parallel drones -- the real efficiency unlock
         Unlocks.Simulation,
-        Unlocks.Megafarm,
+        Unlocks.Dinosaurs,
         Unlocks.Leaderboard,
     ]
 
@@ -135,16 +176,16 @@ def run():
                 target = t
                 break
         if target == None:
-            balanced_sweep()        # nothing actionable: keep resources flowing
-            blocked = set()         # retry parked targets next round
+            balanced_sweep()
+            blocked = set()
             continue
         cost = get_cost(target)
         if affordable(cost):
             if not unlock(target):
-                blocked.add(target)         # affordable but prereq missing
+                blocked.add(target)
         else:
             item = worst_item(cost)
-            if not farm_item(item):
-                blocked.add(target)         # can't fund this item yet -> park
+            if not produce(item):
+                blocked.add(target)
 
 run()
